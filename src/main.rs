@@ -1,79 +1,169 @@
 #![cfg_attr(feature = "nightly", feature(asm))]
+#![feature(test)]
+
+pub mod counters;
 
 use std::{
+    cmp::Ordering,
     fs::File,
     io::{BufRead, BufReader, Read},
 };
 
 use counters::Counter;
 
-pub mod counters;
-
-fn read_numbers<R: Read>(io: R) -> Vec<i32> {
-    let buf_reader = BufReader::new(io);
-    buf_reader
+fn read_numbers<R: Read>(read: R) -> Vec<i64> {
+    BufReader::new(read)
         .lines()
-        .filter_map(|line| line.ok())
-        .filter_map(|line| line.parse().ok())
+        .filter_map(|line| line.ok()?.parse().ok())
         .collect()
 }
 
-fn day_1_part_1(input: &[i32]) -> i32 {
-    input
-        .iter()
-        .enumerate()
-        .find_map(|(i, x)| {
-            input[i + 1..]
-                .iter()
-                .find_map(|y| if x + y == 2020 { Some(x * y) } else { None })
-        })
-        .unwrap()
+struct Runner {
+    time_counter: Counter,
+    inst_counter: Counter,
 }
 
-fn day_1_part_2(input: &[i32]) -> i32 {
-    input
-        .iter()
-        .enumerate()
-        .find_map(|(i, x)| {
-            input[i + 1..].iter().enumerate().find_map(|(j, y)| {
-                input[i + j + 2..].iter().find_map(|z| {
-                    if x + y + z == 2020 {
-                        Some(x * y * z)
-                    } else {
-                        None
-                    }
-                })
-            })
-        })
-        .unwrap()
+impl Runner {
+    fn new() -> Self {
+        Self {
+            time_counter: Counter::by_name("wall-time").unwrap(),
+            inst_counter: Counter::by_name("instructions-minus-irqs:u").unwrap(),
+        }
+    }
+
+    #[inline]
+    fn bench<T, F: FnOnce() -> T>(&self, f: F) -> (T, u64, u64) {
+        let start_time = self.time_counter.since_start();
+        let start = self.inst_counter.since_start();
+        let result = f();
+        let end = self.inst_counter.since_start();
+        let end_time = self.time_counter.since_start();
+        (result, (end_time - start_time), (end - start))
+    }
 }
 
 fn main() {
-    let day_1_input =
-        read_numbers(File::open("data/day_1.txt").expect("unable to find day 1 data"));
+    let runner = Runner::new();
 
-    let instruction_counter = Counter::by_name("instructions-minus-irqs:u").unwrap();
+    // DAY 1
+    {
+        let input = {
+            let file = File::open("data/01.txt").expect("unable to find day 1 data");
+            let mut input = read_numbers(file);
+            input.sort();
+            input
+        };
 
-    let start = instruction_counter.since_start();
-    let day_1_part_1_result = day_1_part_1(&day_1_input);
-    let end = instruction_counter.since_start();
+        let (result, nanoseconds, instructions) = runner.bench(|| {
+            let mut a = input.iter();
+            let mut b = input.iter().rev();
+            let mut x = *a.next()?;
+            let mut y = *b.next()?;
+            loop {
+                match (x + y).cmp(&2020) {
+                    Ordering::Less => x = *a.next()?,
+                    Ordering::Greater => y = *b.next()?,
+                    Ordering::Equal => return Some(x * y),
+                }
+            }
+        });
 
-    println!(
-        "day 1, part 1\nanswer: {}\ninstuctions: {}",
-        day_1_part_1_result,
-        (end - start)
-    );
-    assert_eq!(day_1_part_1_result, 889779);
+        println!(
+            "day 1, part 1\nanswer: {}\ninstuctions: {}\nnanoseconds: {}",
+            result.unwrap(),
+            instructions,
+            nanoseconds,
+        );
+        println!();
 
-    println!();
+        assert_eq!(result, Some(889779));
 
-    let start = instruction_counter.since_start();
-    let day_1_part_2_result = day_1_part_2(&day_1_input);
-    let end = instruction_counter.since_start();
-    println!(
-        "day 1, part 2\nanswer: {}\ninstuctions: {}",
-        day_1_part_2_result,
-        (end - start)
-    );
-    assert_eq!(day_1_part_2_result, 76110336);
+        // let (result, instructions) = runner.bench(|| {
+        //     let min = *input.first()?;
+        //     let mut lookup = Vec::with_capacity(input.len() * (input.len() - 1));
+        //     for i in 0..input.len() {
+        //         let x = input[i];
+        //         for j in (i + 1)..input.len() {
+        //             let y = input[j];
+        //             if x + y + min < 2020 {
+        //                 lookup.push((x + y, x))
+        //             }
+        //         }
+        //     }
+        //     lookup.sort_by_key(|x| x.0);
+        //     let lookup = lookup;
+
+        //     for &z in &input {
+        //         let diff = 2020 - z;
+        //         if let Ok(index) = lookup.binary_search_by_key(&diff, |x| x.0) {
+        //             let (s, x) = lookup[index];
+        //             let y = s - x;
+        //             return Some(x * y * z);
+        //         }
+        //     }
+
+        //     None
+        // });
+
+        // let (result, instructions) = runner.bench(|| {
+        //     let min = *input.first()?;
+        //     let mut lookup = HashMap::with_capacity(input.len() * (input.len() - 1));
+        //     for i in 0..input.len() {
+        //         let x = input[i];
+        //         for j in (i + 1)..input.len() {
+        //             let y = input[j];
+        //             if x + y + min < 2020 {
+        //                 lookup.insert(x + y, x);
+        //             }
+        //         }
+        //     }
+        //     let lookup = lookup;
+
+        //     for &z in &input {
+        //         let diff = 2020 - z;
+        //         if let Some(x) = lookup.get(&diff) {
+        //             let y = diff - x;
+        //             return Some(x * y * z);
+        //         }
+        //     }
+
+        //     None
+        // });
+
+        let (result, nanoseconds, instructions) = runner.bench(|| {
+            let min = *input.first()?;
+            let mut lookup = [0; 2020];
+            for i in 0..input.len() {
+                let x = input[i];
+                for j in (i + 1)..input.len() {
+                    let y = input[j];
+                    if x + y + min < 2020 {
+                        lookup[(x + y) as usize] = x;
+                    }
+                }
+            }
+            let lookup = lookup;
+
+            for &z in &input {
+                let diff = 2020 - z;
+                let x = lookup[diff as usize];
+                if x != 0 {
+                    let y = diff - x;
+                    return Some(x * y * z);
+                }
+            }
+
+            None
+        });
+
+        println!(
+            "day 1, part 2\nanswer: {}\ninstuctions: {}\nnanoseconds: {}",
+            result.unwrap(),
+            instructions,
+            nanoseconds,
+        );
+        println!();
+
+        assert_eq!(result, Some(76110336));
+    }
 }

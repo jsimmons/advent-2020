@@ -106,4 +106,73 @@ fn main() {
 
         assert_eq!(result, Some(76110336));
     }
+
+    // Day 2
+    {
+        let file = std::fs::read_to_string("data/02.txt").expect("unable to find day 2 data");
+
+        #[derive(Debug)]
+        struct Password<'a> {
+            min: usize,
+            max: usize,
+            policy_char: u8,
+            password: &'a [u8],
+        }
+
+        // 5-13 g: cgbmglsdwwlhqk
+        impl<'a> Password<'a> {
+            fn from_line(line: &'a str) -> Option<Password<'a>> {
+                let dash = line.find('-')?;
+                let min = line[0..dash].parse().ok()?;
+                let line = &line[dash + 1..];
+                let first_space = line.find(' ')?;
+                let max = line[0..first_space].parse().ok()?;
+                let line = &line[first_space + 1..];
+                let colon = line.find(':')?;
+                let policy_char = line[0..colon].as_bytes()[0];
+                let line = &line[colon + 2..];
+                let password = line.as_bytes();
+
+                Some(Password {
+                    min,
+                    max,
+                    policy_char,
+                    password,
+                })
+            }
+
+            fn validate_part_1(&self) -> bool {
+                let count = self
+                    .password
+                    .iter()
+                    .filter(|&c| c == &self.policy_char)
+                    .count();
+
+                count >= self.min && count <= self.max
+            }
+
+            fn validate_part_2(&self) -> bool {
+                ((self.password.get(self.min - 1).unwrap() == &self.policy_char) as i32
+                    + (self.password.get(self.max - 1).unwrap() == &self.policy_char) as i32)
+                    == 1
+            }
+        }
+
+        let passwords = file
+            .lines()
+            .filter_map(|line| Password::from_line(line))
+            .collect::<Vec<_>>();
+
+        let result = runner.bench("day 2, part 1", || {
+            passwords.iter().filter(|&p| p.validate_part_1()).count()
+        });
+
+        assert_eq!(result, 560);
+
+        let result = runner.bench("day 2, part 2", || {
+            passwords.iter().filter(|&p| p.validate_part_2()).count()
+        });
+
+        assert_eq!(result, 303);
+    }
 }

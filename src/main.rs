@@ -5,6 +5,7 @@ pub mod counters;
 
 use std::{
     cmp::Ordering,
+    fmt::Debug,
     fs::File,
     io::{BufRead, BufReader, Read},
 };
@@ -32,13 +33,21 @@ impl Runner {
     }
 
     #[inline]
-    fn bench<T, F: FnOnce() -> T>(&self, f: F) -> (T, u64, u64) {
+    fn bench<T: Debug, F: FnOnce() -> T>(&self, name: &str, f: F) -> T {
         let start_time = self.time_counter.since_start();
         let start = self.inst_counter.since_start();
         let result = f();
         let end = self.inst_counter.since_start();
         let end_time = self.time_counter.since_start();
-        (result, (end_time - start_time), (end - start))
+        let instructions = end - start;
+        let nanoseconds = end_time - start_time;
+
+        println!(
+            "{}\n\tresult: {:?}\n\tinstuctions: {}\n\tnanoseconds: {}",
+            name, result, instructions, nanoseconds,
+        );
+
+        result
     }
 }
 
@@ -54,7 +63,7 @@ fn main() {
             input
         };
 
-        let (result, nanoseconds, instructions) = runner.bench(|| {
+        let result = runner.bench("day 1, part 1", || {
             let mut a = input.iter();
             let mut b = input.iter().rev();
             let mut x = *a.next()?;
@@ -68,75 +77,14 @@ fn main() {
             }
         });
 
-        println!(
-            "day 1, part 1\nanswer: {}\ninstuctions: {}\nnanoseconds: {}",
-            result.unwrap(),
-            instructions,
-            nanoseconds,
-        );
-        println!();
-
         assert_eq!(result, Some(889779));
 
-        // let (result, instructions) = runner.bench(|| {
-        //     let min = *input.first()?;
-        //     let mut lookup = Vec::with_capacity(input.len() * (input.len() - 1));
-        //     for i in 0..input.len() {
-        //         let x = input[i];
-        //         for j in (i + 1)..input.len() {
-        //             let y = input[j];
-        //             if x + y + min < 2020 {
-        //                 lookup.push((x + y, x))
-        //             }
-        //         }
-        //     }
-        //     lookup.sort_by_key(|x| x.0);
-        //     let lookup = lookup;
-
-        //     for &z in &input {
-        //         let diff = 2020 - z;
-        //         if let Ok(index) = lookup.binary_search_by_key(&diff, |x| x.0) {
-        //             let (s, x) = lookup[index];
-        //             let y = s - x;
-        //             return Some(x * y * z);
-        //         }
-        //     }
-
-        //     None
-        // });
-
-        // let (result, instructions) = runner.bench(|| {
-        //     let min = *input.first()?;
-        //     let mut lookup = HashMap::with_capacity(input.len() * (input.len() - 1));
-        //     for i in 0..input.len() {
-        //         let x = input[i];
-        //         for j in (i + 1)..input.len() {
-        //             let y = input[j];
-        //             if x + y + min < 2020 {
-        //                 lookup.insert(x + y, x);
-        //             }
-        //         }
-        //     }
-        //     let lookup = lookup;
-
-        //     for &z in &input {
-        //         let diff = 2020 - z;
-        //         if let Some(x) = lookup.get(&diff) {
-        //             let y = diff - x;
-        //             return Some(x * y * z);
-        //         }
-        //     }
-
-        //     None
-        // });
-
-        let (result, nanoseconds, instructions) = runner.bench(|| {
+        let result = runner.bench("day 1, part 2", || {
             let min = *input.first()?;
             let mut lookup = [0; 2020];
-            for i in 0..input.len() {
-                let x = input[i];
-                for j in (i + 1)..input.len() {
-                    let y = input[j];
+
+            for (i, &x) in input.iter().enumerate() {
+                for &y in &input[i + 1..] {
                     if x + y + min < 2020 {
                         lookup[(x + y) as usize] = x;
                     }
@@ -155,14 +103,6 @@ fn main() {
 
             None
         });
-
-        println!(
-            "day 1, part 2\nanswer: {}\ninstuctions: {}\nnanoseconds: {}",
-            result.unwrap(),
-            instructions,
-            nanoseconds,
-        );
-        println!();
 
         assert_eq!(result, Some(76110336));
     }

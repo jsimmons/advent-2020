@@ -44,6 +44,48 @@ impl Runner {
     }
 }
 
+struct Lexer<'a> {
+    bytes: &'a [u8],
+    index: usize,
+}
+
+impl<'a> Lexer<'a> {
+    fn new(bytes: &'a [u8]) -> Self {
+        Self { bytes, index: 0 }
+    }
+
+    fn num(&mut self) -> usize {
+        let mut acc = 0;
+        while let Some(&b) = self.bytes.get(self.index) {
+            let digit = b.wrapping_sub(b'0');
+            if digit <= 9 {
+                acc = acc * 10 + digit as usize;
+                self.index += 1;
+            } else {
+                break;
+            }
+        }
+        acc
+    }
+
+    fn byte(&mut self) -> u8 {
+        if let Some(&b) = self.bytes.get(self.index) {
+            self.index += 1;
+            b
+        } else {
+            0
+        }
+    }
+
+    fn skip_bytes(&mut self, count: usize) {
+        self.index += count;
+    }
+
+    fn remaining(&self) -> &'a [u8] {
+        &self.bytes[self.index..]
+    }
+}
+
 fn main() {
     let runner = Runner::new();
 
@@ -115,13 +157,15 @@ fn main() {
         let result = runner.bench("day 2, part 1", || {
             data.lines()
                 .filter(|line| {
-                    let dash = line.find('-').unwrap();
-                    let space = line.find(' ').unwrap();
-                    let min = line[0..dash].parse().unwrap();
-                    let max = line[dash + 1..space].parse().unwrap();
-                    let bytes = line.as_bytes();
-                    let letter = bytes[space + 1];
-                    let count = bytes.iter().filter(|&&b| b == letter).count() - 1;
+                    let mut lexer = Lexer::new(line.as_bytes());
+                    let min = lexer.num();
+                    lexer.skip_bytes(1);
+                    let max = lexer.num();
+                    lexer.skip_bytes(1);
+                    let letter = lexer.byte();
+                    lexer.skip_bytes(2);
+                    let password = lexer.remaining();
+                    let count = password.iter().filter(|&&b| b == letter).count();
                     count >= min && count <= max
                 })
                 .count()
@@ -132,14 +176,15 @@ fn main() {
         let result = runner.bench("day 2, part 2", || {
             data.lines()
                 .filter(|&line| {
-                    let dash = line.find('-').unwrap();
-                    let space = line.find(' ').unwrap();
-                    let i = line[0..dash].parse::<usize>().unwrap() - 1;
-                    let j = line[dash + 1..space].parse::<usize>().unwrap() - 1;
-                    let bytes = line.as_bytes();
-                    let letter = bytes[space + 1];
-                    let password = &bytes[space + 4..];
-                    ((password[i] == letter) as i32 + (password[j] == letter) as i32) == 1
+                    let mut lexer = Lexer::new(line.as_bytes());
+                    let i = lexer.num();
+                    lexer.skip_bytes(1);
+                    let j = lexer.num();
+                    lexer.skip_bytes(1);
+                    let letter = lexer.byte();
+                    lexer.skip_bytes(2);
+                    let password = lexer.remaining();
+                    (password[i - 1] == letter) ^ (password[j - 1] == letter)
                 })
                 .count()
         });

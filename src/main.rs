@@ -3,20 +3,13 @@
 
 pub mod counters;
 
-use std::{
-    cmp::Ordering,
-    fmt::Debug,
-    fs::File,
-    io::{BufRead, BufReader, Read},
-};
+use std::{cmp::Ordering, fmt::Debug};
 
 use counters::Counter;
 
-fn read_numbers<R: Read>(read: R) -> Vec<i64> {
-    BufReader::new(read)
-        .lines()
-        .filter_map(|line| line.ok()?.parse().ok())
-        .collect()
+fn load_day(day: i32) -> String {
+    let file_name = format!("data/{:02}.txt", day);
+    std::fs::read_to_string(file_name).expect("unable to load data")
 }
 
 struct Runner {
@@ -56,119 +49,99 @@ fn main() {
 
     // DAY 1
     {
-        let input = {
-            let file = File::open("data/01.txt").expect("unable to find day 1 data");
-            let mut input = read_numbers(file);
-            input.sort();
-            input
-        };
+        let data = load_day(1);
 
         let result = runner.bench("day 1, part 1", || {
-            let mut a = input.iter();
-            let mut b = input.iter().rev();
-            let mut x = *a.next()?;
-            let mut y = *b.next()?;
+            let mut data = data
+                .lines()
+                .filter_map(|line| line.parse().ok())
+                .collect::<Vec<i64>>();
+            data.sort_unstable();
+            let data = data;
+
+            let mut a = data.iter();
+            let mut b = data.iter().rev();
+            let mut x = *a.next().unwrap();
+            let mut y = *b.next().unwrap();
             loop {
                 match (x + y).cmp(&2020) {
-                    Ordering::Less => x = *a.next()?,
-                    Ordering::Greater => y = *b.next()?,
-                    Ordering::Equal => return Some(x * y),
+                    Ordering::Less => x = *a.next().unwrap(),
+                    Ordering::Greater => y = *b.next().unwrap(),
+                    Ordering::Equal => return x * y,
                 }
             }
         });
 
-        assert_eq!(result, Some(889779));
+        assert_eq!(result, 889779);
 
         let result = runner.bench("day 1, part 2", || {
-            let min = *input.first()?;
+            let mut data = data
+                .lines()
+                .filter_map(|line| line.parse().ok())
+                .collect::<Vec<i64>>();
+            data.sort_unstable();
+            let data = data;
+
+            let min = *data.first().unwrap();
             let mut lookup = [0; 2020];
 
-            for (i, &x) in input.iter().enumerate() {
-                for &y in &input[i + 1..] {
+            for (i, &x) in data.iter().enumerate() {
+                for &y in &data[i + 1..] {
                     if x + y + min < 2020 {
                         lookup[(x + y) as usize] = x;
                     }
                 }
             }
-            let lookup = lookup;
 
-            for &z in &input {
+            for &z in &data {
                 let diff = 2020 - z;
                 let x = lookup[diff as usize];
                 if x != 0 {
                     let y = diff - x;
-                    return Some(x * y * z);
+                    return x * y * z;
                 }
             }
 
-            None
+            0
         });
 
-        assert_eq!(result, Some(76110336));
+        assert_eq!(result, 76110336);
     }
 
     // Day 2
     {
-        let file = std::fs::read_to_string("data/02.txt").expect("unable to find day 2 data");
-
-        struct Password<'a> {
-            min: usize,
-            max: usize,
-            policy_char: u8,
-            password: &'a [u8],
-        }
-
-        impl<'a> Password<'a> {
-            fn from_line(line: &'a str) -> Option<Password<'a>> {
-                let dash = line.find('-')?;
-                let min = line[0..dash].parse().ok()?;
-                let line = &line[dash + 1..];
-                let first_space = line.find(' ')?;
-                let max = line[0..first_space].parse().ok()?;
-                let line = &line[first_space + 1..];
-                let colon = line.find(':')?;
-                let policy_char = line[0..colon].as_bytes()[0];
-                let line = &line[colon + 2..];
-                let password = line.as_bytes();
-
-                Some(Password {
-                    min,
-                    max,
-                    policy_char,
-                    password,
-                })
-            }
-
-            fn validate_part_1(&self) -> bool {
-                let count = self
-                    .password
-                    .iter()
-                    .filter(|&c| c == &self.policy_char)
-                    .count();
-
-                count >= self.min && count <= self.max
-            }
-
-            fn validate_part_2(&self) -> bool {
-                ((self.password.get(self.min - 1).unwrap() == &self.policy_char) as i32
-                    + (self.password.get(self.max - 1).unwrap() == &self.policy_char) as i32)
-                    == 1
-            }
-        }
-
-        let passwords = file
-            .lines()
-            .filter_map(|line| Password::from_line(line))
-            .collect::<Vec<_>>();
+        let data = load_day(2);
 
         let result = runner.bench("day 2, part 1", || {
-            passwords.iter().filter(|&p| p.validate_part_1()).count()
+            data.lines()
+                .filter(|line| {
+                    let dash = line.find('-').unwrap();
+                    let space = line.find(' ').unwrap();
+                    let min = line[0..dash].parse().unwrap();
+                    let max = line[dash + 1..space].parse().unwrap();
+                    let bytes = line.as_bytes();
+                    let letter = bytes[space + 1];
+                    let count = bytes.iter().filter(|&&b| b == letter).count() - 1;
+                    count >= min && count <= max
+                })
+                .count()
         });
 
         assert_eq!(result, 560);
 
         let result = runner.bench("day 2, part 2", || {
-            passwords.iter().filter(|&p| p.validate_part_2()).count()
+            data.lines()
+                .filter(|&line| {
+                    let dash = line.find('-').unwrap();
+                    let space = line.find(' ').unwrap();
+                    let i = line[0..dash].parse::<usize>().unwrap() - 1;
+                    let j = line[dash + 1..space].parse::<usize>().unwrap() - 1;
+                    let bytes = line.as_bytes();
+                    let letter = bytes[space + 1];
+                    let password = &bytes[space + 4..];
+                    ((password[i] == letter) as i32 + (password[j] == letter) as i32) == 1
+                })
+                .count()
         });
 
         assert_eq!(result, 303);
@@ -176,47 +149,34 @@ fn main() {
 
     // Day 3
     {
-        let file = std::fs::read_to_string("data/03.txt").expect("unable to find day 3 data");
-        let data = file
-            .lines()
-            .map(|line| {
-                let line = line.as_bytes();
-                let mut acc = 0;
-                for &b in line {
-                    acc <<= 1;
-                    acc |= (b == b'#') as u32;
-                }
-                acc
-            })
-            .collect::<Vec<_>>();
+        let data = load_day(3);
 
         let result = runner.bench("day 3, part 1", || {
             let mut pos = 0;
-            data.iter()
-                .map(|&row| {
-                    let mask = 1 << (30 - (pos % 31));
-                    pos += 3;
-                    (row & mask != 0) as i32
+            data.lines()
+                .filter(|&row| {
+                    let tree = row.as_bytes()[pos] == b'#';
+                    pos = (pos + 3) % row.len();
+                    tree
                 })
-                .sum::<i32>()
+                .count()
         });
 
         assert_eq!(result, 203);
 
         let result = runner.bench("day 3, part 2", || {
-            let runs = [(1, 1), (3, 1), (5, 1), (7, 1), (1, 2)];
-
-            runs.iter()
+            [(1, 1), (3, 1), (5, 1), (7, 1), (1, 2)]
+                .iter()
                 .map(|&(step_x, step_y)| {
                     let mut pos_x = 0;
-                    data.iter()
+                    data.lines()
                         .step_by(step_y)
-                        .map(|&row| {
-                            let mask = 1 << (30 - (pos_x % 31));
-                            pos_x += step_x;
-                            (row & mask != 0) as i64
+                        .filter(|&row| {
+                            let tree = row.as_bytes()[pos_x] == b'#';
+                            pos_x = (pos_x + step_x) % row.len();
+                            tree
                         })
-                        .sum::<i64>()
+                        .count() as i64
                 })
                 .product::<i64>()
         });

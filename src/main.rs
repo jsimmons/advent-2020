@@ -206,18 +206,33 @@ fn main() {
         assert_eq!(result, 203);
 
         let result = runner.bench("day 3, part 2", || {
-            let lines = data.lines().collect::<Vec<_>>();
+            let lines = data
+                .lines()
+                .map(|line| {
+                    line.as_bytes()
+                        .iter()
+                        .fold(0, |acc, &b| acc << 1 | (b == b'#') as u32)
+                })
+                .collect::<Vec<_>>();
+
+            let rotr31 = |x: u32, count: usize| -> u32 { x >> count | x << (31 - count) };
+
             [(1, 1), (3, 1), (5, 1), (7, 1), (1, 2)]
                 .iter()
-                .map(|&(step_x, step_y)| {
+                .map(|&(dx, dy)| {
                     lines
                         .iter()
-                        .step_by(step_y)
-                        .enumerate()
-                        .filter(|&(i, row)| row.as_bytes()[(i * step_x) % row.len()] == b'#')
-                        .count() as i64
+                        .step_by(dy)
+                        .fold(
+                            (0b0100_0000_0000_0000_0000_0000_0000_0000, 0),
+                            |(mask, count), &line| {
+                                let tree = line & mask != 0;
+                                (rotr31(mask, dx), count + tree as u64)
+                            },
+                        )
+                        .1
                 })
-                .product::<i64>()
+                .product::<u64>()
         });
 
         assert_eq!(result, 3316272960);

@@ -36,7 +36,7 @@ impl Runner {
         let nanoseconds = end_time - start_time;
 
         println!(
-            "{}\n\tresult: {:?}\n\tinstuctions: {}\n\tnanoseconds: {}",
+            "{}\n\tresult: {:?}\n\tinstructions: {}\n\tnanoseconds: {}",
             name, result, instructions, nanoseconds,
         );
 

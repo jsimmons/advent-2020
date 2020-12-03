@@ -111,7 +111,6 @@ fn main() {
     {
         let file = std::fs::read_to_string("data/02.txt").expect("unable to find day 2 data");
 
-        #[derive(Debug)]
         struct Password<'a> {
             min: usize,
             max: usize,
@@ -119,7 +118,6 @@ fn main() {
             password: &'a [u8],
         }
 
-        // 5-13 g: cgbmglsdwwlhqk
         impl<'a> Password<'a> {
             fn from_line(line: &'a str) -> Option<Password<'a>> {
                 let dash = line.find('-')?;
@@ -174,5 +172,55 @@ fn main() {
         });
 
         assert_eq!(result, 303);
+    }
+
+    // Day 3
+    {
+        let file = std::fs::read_to_string("data/03.txt").expect("unable to find day 3 data");
+        let data = file
+            .lines()
+            .map(|line| {
+                let line = line.as_bytes();
+                let mut acc = 0;
+                for &b in line {
+                    acc <<= 1;
+                    acc |= (b == b'#') as u32;
+                }
+                acc
+            })
+            .collect::<Vec<_>>();
+
+        let result = runner.bench("day 3, part 1", || {
+            let mut pos = 0;
+            data.iter()
+                .map(|&row| {
+                    let mask = 1 << (30 - (pos % 31));
+                    pos += 3;
+                    (row & mask != 0) as i32
+                })
+                .sum::<i32>()
+        });
+
+        assert_eq!(result, 203);
+
+        let result = runner.bench("day 3, part 2", || {
+            let runs = [(1, 1), (3, 1), (5, 1), (7, 1), (1, 2)];
+
+            runs.iter()
+                .map(|&(step_x, step_y)| {
+                    let mut pos_x = 0;
+                    data.iter()
+                        .step_by(step_y)
+                        .map(|&row| {
+                            let mask = 1 << (30 - (pos_x % 31));
+                            pos_x += step_x;
+                            (row & mask != 0) as i64
+                        })
+                        .sum::<i64>()
+                })
+                .product::<i64>()
+        });
+
+        assert_eq!(result, 3316272960);
     }
 }

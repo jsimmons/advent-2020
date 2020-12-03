@@ -152,30 +152,24 @@ fn main() {
         let data = load_day(3);
 
         let result = runner.bench("day 3, part 1", || {
-            let mut pos = 0;
             data.lines()
-                .filter(|&row| {
-                    let tree = row.as_bytes()[pos] == b'#';
-                    pos = (pos + 3) % row.len();
-                    tree
-                })
+                .enumerate()
+                .filter(|&(i, row)| row.as_bytes()[(i * 3) % row.len()] == b'#')
                 .count()
         });
 
         assert_eq!(result, 203);
 
         let result = runner.bench("day 3, part 2", || {
+            let lines = data.lines().collect::<Vec<_>>();
             [(1, 1), (3, 1), (5, 1), (7, 1), (1, 2)]
                 .iter()
                 .map(|&(step_x, step_y)| {
-                    let mut pos_x = 0;
-                    data.lines()
+                    lines
+                        .iter()
                         .step_by(step_y)
-                        .filter(|&row| {
-                            let tree = row.as_bytes()[pos_x] == b'#';
-                            pos_x = (pos_x + step_x) % row.len();
-                            tree
-                        })
+                        .enumerate()
+                        .filter(|&(i, row)| row.as_bytes()[(i * step_x) % row.len()] == b'#')
                         .count() as i64
                 })
                 .product::<i64>()

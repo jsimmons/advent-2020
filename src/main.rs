@@ -325,25 +325,21 @@ fn main() {
                             b"byr" => valid_num_4(lexer.field(), 1920, 2002),
                             b"iyr" => valid_num_4(lexer.field(), 2010, 2020),
                             b"eyr" => valid_num_4(lexer.field(), 2020, 2030),
-                            b"hgt" => {
-                                let field = lexer.field();
-                                if field.ends_with(b"cm") {
-                                    valid_num(&field[..field.len() - 2], 150, 193)
-                                } else if field.ends_with(b"in") {
-                                    valid_num(&field[..field.len() - 2], 59, 76)
-                                } else {
-                                    false
+                            b"hgt" => match lexer.field() {
+                                [num @ .., b'c', b'm'] => valid_num(num, 150, 193),
+                                [num @ .., b'i', b'n'] => valid_num(num, 59, 76),
+                                _ => false,
+                            },
+                            b"hcl" => match lexer.field() {
+                                [b'#', digits @ ..] => {
+                                    digits.len() == 6
+                                        && digits.iter().all(|&b| match b {
+                                            b'0'..=b'9' | b'a'..=b'f' => true,
+                                            _ => false,
+                                        })
                                 }
-                            }
-                            b"hcl" => {
-                                let field = lexer.field();
-                                field.len() == 7
-                                    && field[0] == b'#'
-                                    && field[1..].iter().all(|&b| match b {
-                                        b'0'..=b'9' | b'a'..=b'f' => true,
-                                        _ => false,
-                                    })
-                            }
+                                _ => false,
+                            },
                             b"ecl" => match lexer.field() {
                                 b"amb" | b"blu" | b"brn" | b"gry" | b"grn" | b"hzl" | b"oth" => {
                                     true

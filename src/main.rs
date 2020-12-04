@@ -305,11 +305,10 @@ fn main() {
                     let mut lexer = Lexer::new(passport.as_bytes());
 
                     let valid_num = |slice: &[u8], min, max| {
-                        if let Ok(num) = std::str::from_utf8(slice).unwrap().parse::<i32>() {
-                            num >= min && num <= max
-                        } else {
-                            false
-                        }
+                        std::str::from_utf8(slice)
+                            .unwrap()
+                            .parse::<i32>()
+                            .map_or(false, |num| num >= min && num <= max)
                     };
 
                     let valid_num_4 = |slice: &[u8], min, max| {

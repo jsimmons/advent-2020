@@ -77,8 +77,43 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    fn bytes_to(&mut self, needle: &[u8]) -> &[u8] {
+        let start_index = self.index;
+
+        let end_index = if let Some(found_index) = &self.bytes[self.index..]
+            .iter()
+            .position(|b| needle.contains(b))
+        {
+            self.index = start_index + found_index + 1;
+            start_index + found_index
+        } else {
+            self.index = self.bytes.len();
+            self.bytes.len()
+        };
+
+        &self.bytes[start_index..end_index]
+    }
+
+    fn field(&mut self) -> &[u8] {
+        self.skip_ws();
+        self.bytes_to(&[b':', b' ', b'\n'])
+    }
+
+    fn skip_ws(&mut self) {
+        while let Some(&b) = self.bytes.get(self.index) {
+            if b != b' ' || b != b'\n' {
+                break;
+            }
+            self.index += 1;
+        }
+    }
+
     fn skip_bytes(&mut self, count: usize) {
         self.index += count;
+    }
+
+    fn is_empty(&self) -> bool {
+        self.index >= self.bytes.len() - 1
     }
 
     fn remaining(&self) -> &'a [u8] {
@@ -236,5 +271,114 @@ fn main() {
         });
 
         assert_eq!(result, 3316272960);
+    }
+
+    // Day 4
+    {
+        let data = load_day(4);
+
+        let result = runner.bench("day 4, part 1", || {
+            data.split("\n\n")
+                .filter(|&passport| {
+                    let mut lexer = Lexer::new(passport.as_bytes());
+                    let mut valid_fields = 0;
+                    while lexer.is_empty() == false {
+                        match lexer.field() {
+                            b"byr" | b"iyr" | b"eyr" | b"hgt" | b"hcl" | b"ecl" | b"pid" => {
+                                valid_fields += 1;
+                            }
+                            _ => {}
+                        }
+
+                        let _ = lexer.field();
+                    }
+                    valid_fields == 7
+                })
+                .count()
+        });
+
+        assert_eq!(result, 256);
+
+        let result = runner.bench("day 4, part 2", || {
+            data.split("\n\n")
+                .filter(|&passport| {
+                    let mut lexer = Lexer::new(passport.as_bytes());
+
+                    let valid_num = |slice: &[u8], min, max| {
+                        if let Ok(num) = std::str::from_utf8(slice).unwrap().parse::<i32>() {
+                            num >= min && num <= max
+                        } else {
+                            false
+                        }
+                    };
+
+                    let valid_num_4 = |slice: &[u8], min, max| {
+                        if slice.len() == 4 {
+                            valid_num(slice, min, max)
+                        } else {
+                            false
+                        }
+                    };
+
+                    let mut valid_count = 0;
+                    while lexer.is_empty() == false {
+                        let valid = match lexer.field() {
+                            b"byr" => valid_num_4(lexer.field(), 1920, 2002),
+                            b"iyr" => valid_num_4(lexer.field(), 2010, 2020),
+                            b"eyr" => valid_num_4(lexer.field(), 2020, 2030),
+                            b"hgt" => {
+                                let field = lexer.field();
+                                if field.ends_with(b"cm") {
+                                    valid_num(&field[..field.len() - 2], 150, 193)
+                                } else if field.ends_with(b"in") {
+                                    valid_num(&field[..field.len() - 2], 59, 76)
+                                } else {
+                                    false
+                                }
+                            }
+                            b"hcl" => {
+                                let field = lexer.field();
+                                field.len() == 7
+                                    && field[0] == b'#'
+                                    && field[1..].iter().all(|&b| match b {
+                                        b'0'..=b'9' | b'a'..=b'f' => true,
+                                        _ => false,
+                                    })
+                            }
+                            b"ecl" => match lexer.field() {
+                                b"amb" | b"blu" | b"brn" | b"gry" | b"grn" | b"hzl" | b"oth" => {
+                                    true
+                                }
+                                _ => false,
+                            },
+                            b"pid" => {
+                                let field = lexer.field();
+                                field.len() == 9
+                                    && field.iter().all(|&b| match b {
+                                        b'0'..=b'9' => true,
+                                        _ => false,
+                                    })
+                            }
+                            b"cid" => {
+                                let _ = lexer.field();
+                                valid_count -= 1;
+                                true
+                            }
+                            _ => false,
+                        };
+
+                        if valid {
+                            valid_count += 1;
+                        } else {
+                            break;
+                        }
+                    }
+
+                    valid_count == 7
+                })
+                .count()
+        });
+
+        assert_eq!(result, 198);
     }
 }

@@ -3,7 +3,7 @@
 
 pub mod counters;
 
-use std::{cmp::Ordering, fmt::Debug};
+use std::{cmp::Ordering, collections::HashSet, fmt::Debug};
 
 use counters::Counter;
 
@@ -394,15 +394,10 @@ fn main() {
         let result = runner.bench("day 5, part 2", || {
             let mut data = data.lines().map(to_num).collect::<Vec<_>>();
             data.sort();
-
-            let mut seat_id = data[0];
-            for &occupied_seat_id in &data[1..data.len() - 1] {
-                seat_id += 1;
-                if seat_id != occupied_seat_id {
-                    break;
-                }
-            }
-            seat_id
+            (data[0] + 1..1023)
+                .zip(&data[1..data.len() - 1])
+                .find_map(|(a, &b)| if a != b { Some(a) } else { None })
+                .unwrap()
         });
 
         assert_eq!(result, 659);

@@ -381,79 +381,28 @@ fn main() {
     {
         let data = load_day(5);
 
-        let cmp = |c| match c {
-            b'F' | b'L' => Ordering::Greater,
-            b'B' | b'R' => Ordering::Less,
-            _ => panic!("oops"),
-        };
-
-        let result = runner.bench("day 5, part 1", || {
-            let rows = (0..128).collect::<Box<[i32]>>();
-            let cols = (0..8).collect::<Box<[i32]>>();
-            data.lines()
-                .map(|line| {
-                    let mut line = line.as_bytes();
-                    let row = rows
-                        .binary_search_by(|_| {
-                            if line.len() == 3 {
-                                return Ordering::Equal;
-                            }
-                            let control = line[0];
-                            line = &line[1..];
-                            cmp(control)
-                        })
-                        .unwrap();
-                    let col = cols
-                        .binary_search_by(|_| {
-                            if line.len() == 0 {
-                                return Ordering::Equal;
-                            }
-                            let control = line[0];
-                            line = &line[1..];
-                            cmp(control)
-                        })
-                        .unwrap();
-                    row * 8 + col
+        let mut data = data
+            .lines()
+            .map(|line| {
+                line.as_bytes().iter().fold(0, |acc, elem| {
+                    (acc << 1)
+                        | match *elem {
+                            b'F' | b'L' => 0,
+                            _ => 1,
+                        }
                 })
-                .max()
-                .unwrap()
-        });
+            })
+            .collect::<Vec<i32>>();
+
+        data.sort();
+
+        let result = runner.bench("day 5, part 1", || data[data.len() - 1]);
 
         assert_eq!(result, 896);
 
         let result = runner.bench("day 5, part 2", || {
-            let rows = (0..128).collect::<Box<[i32]>>();
-            let cols = (0..8).collect::<Box<[i32]>>();
-            let mut occupied_seat_ids = data
-                .lines()
-                .map(|line| {
-                    let mut line = line.as_bytes();
-                    let row = rows
-                        .binary_search_by(|_| {
-                            if line.len() == 3 {
-                                return Ordering::Equal;
-                            }
-                            let control = line[0];
-                            line = &line[1..];
-                            cmp(control)
-                        })
-                        .unwrap();
-                    let col = cols
-                        .binary_search_by(|_| {
-                            if line.len() == 0 {
-                                return Ordering::Equal;
-                            }
-                            let control = line[0];
-                            line = &line[1..];
-                            cmp(control)
-                        })
-                        .unwrap();
-                    row * 8 + col
-                })
-                .collect::<Vec<_>>();
-            occupied_seat_ids.sort();
-            let mut seat_id = occupied_seat_ids[0];
-            for &occupied_seat_id in &occupied_seat_ids[1..occupied_seat_ids.len() - 1] {
+            let mut seat_id = data[0];
+            for &occupied_seat_id in &data[1..data.len() - 1] {
                 seat_id += 1;
                 if seat_id != occupied_seat_id {
                     break;

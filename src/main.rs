@@ -381,26 +381,20 @@ fn main() {
     {
         let data = load_day(5);
 
-        let mut data = data
-            .lines()
-            .map(|line| {
-                line.as_bytes().iter().fold(0, |acc, elem| {
-                    (acc << 1)
-                        | match *elem {
-                            b'F' | b'L' => 0,
-                            _ => 1,
-                        }
-                })
+        let to_num = |line: &str| {
+            line.as_bytes().iter().fold(0, |acc, elem| {
+                (acc << 1) | (*elem == b'B' || *elem == b'R') as u32
             })
-            .collect::<Vec<i32>>();
+        };
 
-        data.sort();
-
-        let result = runner.bench("day 5, part 1", || data[data.len() - 1]);
+        let result = runner.bench("day 5, part 1", || data.lines().map(to_num).max().unwrap());
 
         assert_eq!(result, 896);
 
         let result = runner.bench("day 5, part 2", || {
+            let mut data = data.lines().map(to_num).collect::<Vec<_>>();
+            data.sort();
+
             let mut seat_id = data[0];
             for &occupied_seat_id in &data[1..data.len() - 1] {
                 seat_id += 1;

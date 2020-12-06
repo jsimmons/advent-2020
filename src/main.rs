@@ -1,9 +1,10 @@
 #![cfg_attr(feature = "nightly", feature(asm))]
 #![feature(test)]
+#![feature(iterator_fold_self)]
 
 pub mod counters;
 
-use std::{cmp::Ordering, collections::HashSet, fmt::Debug};
+use std::{cmp::Ordering, fmt::Debug};
 
 use counters::Counter;
 
@@ -382,8 +383,8 @@ fn main() {
         let data = load_day(5);
 
         let to_num = |line: &str| {
-            line.as_bytes().iter().fold(0, |acc, elem| {
-                (acc << 1) | (*elem == b'B' || *elem == b'R') as u32
+            line.as_bytes().iter().fold(0, |acc, &elem| {
+                (acc << 1) | (elem == b'B' || elem == b'R') as u32
             })
         };
 
@@ -392,14 +393,56 @@ fn main() {
         assert_eq!(result, 896);
 
         let result = runner.bench("day 5, part 2", || {
-            let mut data = data.lines().map(to_num).collect::<Vec<_>>();
-            data.sort();
-            (data[0] + 1..1023)
-                .zip(&data[1..data.len() - 1])
-                .find_map(|(a, &b)| if a != b { Some(a) } else { None })
-                .unwrap()
+            let mut seats = data.lines().map(to_num).collect::<Vec<_>>();
+            seats.sort_unstable();
+            let mut seat = seats[0];
+            for &occupied_seat in &seats[1..seats.len() - 1] {
+                seat += 1;
+                if seat != occupied_seat {
+                    break;
+                }
+            }
+            seat
         });
 
         assert_eq!(result, 659);
+    }
+
+    // Day 6
+    {
+        let data = load_day(6);
+
+        let result = runner.bench("day 6, part 1", || {
+            data.split("\n\n")
+                .map(|group| {
+                    group
+                        .lines()
+                        .flat_map(str::as_bytes)
+                        .fold(0, |acc, &element| acc | 1u32 << (element - b'a'))
+                        .count_ones()
+                })
+                .sum::<u32>()
+        });
+
+        assert_eq!(result, 6885);
+
+        let result = runner.bench("day 6, part 2", || {
+            data.split("\n\n")
+                .map(|group| {
+                    group
+                        .lines()
+                        .map(|line| {
+                            line.as_bytes()
+                                .iter()
+                                .fold(0, |acc, &element| acc | 1u32 << (element - b'a'))
+                        })
+                        .fold_first(|acc, element| acc & element)
+                        .unwrap_or(0)
+                        .count_ones()
+                })
+                .sum::<u32>()
+        });
+
+        assert_eq!(result, 3550);
     }
 }

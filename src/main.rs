@@ -1,5 +1,6 @@
 #![cfg_attr(feature = "nightly", feature(asm))]
 #![feature(test)]
+#![feature(iterator_fold_self)]
 
 pub mod counters;
 
@@ -426,7 +427,8 @@ fn main() {
                 .map(|g| {
                     g.lines()
                         .map(|l| l.as_bytes().iter().fold(0, mask))
-                        .fold(!0, |acc, elem| acc & elem)
+                        .fold_first(|acc, elem| acc & elem)
+                        .unwrap_or(0)
                         .count_ones()
                 })
                 .sum::<u32>()

@@ -412,15 +412,11 @@ fn main() {
     {
         let data = load_day(6);
 
+        let mask = |acc, &elem| acc | 1u32 << (elem - b'a');
+
         let result = runner.bench("day 6, part 1", || {
             data.split("\n\n")
-                .map(|group| {
-                    group
-                        .lines()
-                        .flat_map(str::as_bytes)
-                        .fold(0, |acc, &element| acc | 1u32 << (element - b'a'))
-                        .count_ones()
-                })
+                .map(|g| g.lines().flat_map(str::as_bytes).fold(0, mask).count_ones())
                 .sum::<u32>()
         });
 
@@ -428,15 +424,10 @@ fn main() {
 
         let result = runner.bench("day 6, part 2", || {
             data.split("\n\n")
-                .map(|group| {
-                    group
-                        .lines()
-                        .map(|line| {
-                            line.as_bytes()
-                                .iter()
-                                .fold(0, |acc, &element| acc | 1u32 << (element - b'a'))
-                        })
-                        .fold_first(|acc, element| acc & element)
+                .map(|g| {
+                    g.lines()
+                        .map(|l| l.as_bytes().iter().fold(0, mask))
+                        .fold_first(|acc, elem| acc & elem)
                         .unwrap_or(0)
                         .count_ones()
                 })

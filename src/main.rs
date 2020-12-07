@@ -1,10 +1,11 @@
 #![cfg_attr(feature = "nightly", feature(asm))]
 #![feature(test)]
 #![feature(iterator_fold_self)]
+#![feature(str_split_once)]
 
 pub mod counters;
 
-use std::{cmp::Ordering, fmt::Debug};
+use std::{cmp::Ordering, collections::HashMap, fmt::Debug};
 
 use counters::Counter;
 
@@ -437,5 +438,91 @@ fn main() {
         });
 
         assert_eq!(result, 3550);
+    }
+
+    // Day 7
+    {
+        let data = load_day(7);
+
+        type Bags<'a> = HashMap<&'a str, Vec<(&'a str, u64)>>;
+
+        fn parse_bags(data: &str) -> Bags {
+            data.lines()
+                .map(|line| {
+                    let line = line.trim_end_matches('.');
+                    let (bag_name, rest) = line.split_once(" bags contain ").unwrap();
+                    if rest == "no other bags" {
+                        return (bag_name, Vec::new());
+                    }
+                    let other_bags = rest
+                        .split(", ")
+                        .map(|e| {
+                            let (num, bag) = e.split_once(" ").unwrap();
+                            (
+                                bag.trim_end_matches(" bags").trim_end_matches(" bag"),
+                                num.parse().unwrap(),
+                            )
+                        })
+                        .collect::<Vec<_>>();
+                    (bag_name, other_bags)
+                })
+                .collect::<HashMap<_, _>>()
+        }
+
+        let result = runner.bench("day 7, part 1", || {
+            let bags = parse_bags(&data);
+
+            fn contains_shiny_gold<'visit, 'a>(
+                visited: &'visit mut HashMap<&'a str, bool>,
+                bags: &'a Bags,
+                bag: &'a str,
+            ) -> bool {
+                if let Some(&contains) = visited.get(bag) {
+                    return contains;
+                }
+                let has = bag == "shiny gold"
+                    || bags[bag]
+                        .iter()
+                        .map(|(bag, _)| contains_shiny_gold(visited, bags, bag))
+                        .find(|&x| x)
+                        .unwrap_or(false);
+                visited.insert(bag, has);
+                has
+            }
+
+            let mut visited = HashMap::new();
+            bags.keys()
+                .filter(|bag| contains_shiny_gold(&mut visited, &bags, bag))
+                .count()
+                - 1
+        });
+
+        assert_eq!(result, 238);
+
+        let result = runner.bench("day 7, part 2", || {
+            let bags = parse_bags(&data);
+
+            fn count_bags_inside<'visit, 'a>(
+                visited: &'visit mut HashMap<&'a str, u64>,
+                bags: &'a Bags,
+                bag: &'a str,
+            ) -> u64 {
+                if let Some(&count) = visited.get(bag) {
+                    return count;
+                }
+                let count = bags[bag]
+                    .iter()
+                    .map(|(bag, count)| count * count_bags_inside(visited, bags, bag))
+                    .sum::<u64>()
+                    + 1;
+                visited.insert(bag, count);
+                count
+            }
+
+            let mut visited = HashMap::new();
+            count_bags_inside(&mut visited, &bags, "shiny gold") - 1
+        });
+
+        assert_eq!(result, 82930);
     }
 }

@@ -395,14 +395,16 @@ fn main() {
         let result = runner.bench("day 5, part 2", || {
             let mut seats = data.lines().map(to_num).collect::<Vec<_>>();
             seats.sort_unstable();
-            let mut seat = seats[0];
-            for &occupied_seat in &seats[1..seats.len() - 1] {
-                seat += 1;
-                if seat != occupied_seat {
-                    break;
-                }
-            }
-            seat
+            seats
+                .windows(2)
+                .find_map(|w| {
+                    if w[0] + 1 != w[1] {
+                        Some(w[0] + 1)
+                    } else {
+                        None
+                    }
+                })
+                .unwrap()
         });
 
         assert_eq!(result, 659);

@@ -5,7 +5,7 @@
 
 pub mod counters;
 
-use std::{cmp::Ordering, collections::HashMap, fmt::Debug};
+use std::{cmp::Ordering, collections::HashMap, fmt::Debug, time::Duration};
 
 use counters::Counter;
 
@@ -37,9 +37,11 @@ impl Runner {
         let instructions = end - start;
         let nanoseconds = end_time - start_time;
 
+        let result_fmt = format!("{:?}", result);
+        let duration_fmt = format!("{:?}", Duration::from_nanos(nanoseconds));
         println!(
-            "{}\n\tresult: {:?}\n\tinstructions: {}\n\tnanoseconds: {}",
-            name, result, instructions, nanoseconds,
+            " {:<14} | {:<15} | {:<15} | {:<15}",
+            name, result_fmt, duration_fmt, instructions,
         );
 
         result
@@ -125,6 +127,13 @@ impl<'a> Lexer<'a> {
 
 fn main() {
     let runner = Runner::new();
+
+    println!(
+        "{:<15} | {:<15} | {:<15} | {:<15}",
+        "", "Result", "Duration", "Instructions Retired",
+    );
+
+    println!("{:-^1$}", "", 75);
 
     // DAY 1
     {

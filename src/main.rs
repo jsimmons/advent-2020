@@ -474,15 +474,17 @@ fn main() {
                 bags: &'a Bags,
                 bag: &'a str,
             ) -> bool {
-                if let Some(&contains) = visited.get(bag) {
-                    return contains;
-                }
-                let found = bag == "shiny gold"
-                    || bags[bag]
+                if bag == "shiny gold" {
+                    true
+                } else if let Some(&found) = visited.get(bag) {
+                    found
+                } else {
+                    let found = bags[bag]
                         .iter()
                         .any(|(bag, _)| contains_shiny_gold(visited, bags, bag));
-                visited.insert(bag, found);
-                found
+                    visited.insert(bag, found);
+                    found
+                }
             }
 
             let mut visited = HashMap::new();

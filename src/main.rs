@@ -130,10 +130,10 @@ fn main() {
 
     println!(
         "{:<15} | {:<15} | {:<15} | {:<15}",
-        "", "Result", "Duration", "Instructions Retired",
+        "", "Result", "Duration", "Instructions",
     );
 
-    println!("{:-^1$}", "", 75);
+    println!("{:-^1$}", "", 67);
 
     // DAY 1
     {

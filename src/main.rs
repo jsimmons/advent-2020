@@ -474,20 +474,16 @@ fn main() {
         }
 
         let result = runner.bench("day 7, part 1", || {
-            fn contains<'v, 'a>(
-                v: &'v mut HashMap<&'a str, bool>,
-                bags: &'a Bags,
-                b: &'a str,
-            ) -> bool {
+            fn has<'v, 'a>(v: &'v mut HashMap<&'a str, bool>, bags: &'a Bags, b: &'a str) -> bool {
                 v.get(b).copied().unwrap_or_else(|| {
-                    let f = b == "shiny gold" || bags[b].iter().any(|(b, _)| contains(v, bags, b));
+                    let f = b == "shiny gold" || bags[b].iter().any(|(b, _)| has(v, bags, b));
                     v.insert(b, f);
                     f
                 })
             }
             let bags = parse_bags(&data);
             let mut v = HashMap::new();
-            bags.keys().filter(|b| contains(&mut v, &bags, b)).count() - 1
+            bags.keys().filter(|b| has(&mut v, &bags, b)).count() - 1
         });
 
         assert_eq!(result, 238);

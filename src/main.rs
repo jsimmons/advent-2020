@@ -2,6 +2,7 @@
 #![feature(test)]
 #![feature(iterator_fold_self)]
 #![feature(str_split_once)]
+#![feature(slice_fill)]
 
 pub mod counters;
 
@@ -497,5 +498,110 @@ fn main() {
         });
 
         assert_eq!(result, 82930);
+    }
+
+    // Day 8
+    {
+        let data = load_day(8);
+
+        let parse_code = || {
+            data.lines()
+                .map(|l| {
+                    let operand = l[4..].parse().unwrap();
+                    match l.as_bytes()[0] {
+                        b'n' => Instruction::Nop(operand),
+                        b'j' => Instruction::Jmp(operand),
+                        b'a' => Instruction::Acc(operand),
+                        _ => panic!("unknown instruction"),
+                    }
+                })
+                .collect::<Vec<_>>()
+        };
+
+        #[derive(Copy, Clone)]
+        enum Instruction {
+            Nop(isize),
+            Jmp(isize),
+            Acc(isize),
+        }
+
+        struct VM<'c> {
+            code: &'c [Instruction],
+            ip: usize,
+            acc: isize,
+            swap: usize,
+        }
+
+        impl<'c> VM<'c> {
+            fn new(code: &'c [Instruction], swap: usize) -> Self {
+                VM {
+                    code,
+                    ip: 0,
+                    acc: 0,
+                    swap,
+                }
+            }
+
+            fn running(&self) -> bool {
+                self.ip < self.code.len()
+            }
+
+            fn exec(&mut self) {
+                match self.code[self.ip] {
+                    Instruction::Nop(operand) => {
+                        let operand = if self.ip == self.swap { operand } else { 1 };
+                        self.ip = self.ip.wrapping_add(operand as usize);
+                    }
+                    Instruction::Jmp(operand) => {
+                        let operand = if self.ip == self.swap { 1 } else { operand };
+                        self.ip = self.ip.wrapping_add(operand as usize);
+                    }
+                    Instruction::Acc(operand) => {
+                        self.acc += operand;
+                        self.ip = self.ip.wrapping_add(1);
+                    }
+                }
+            }
+        }
+
+        let result = runner.bench("day 8, part 1", || {
+            let code = parse_code();
+            let mut visited = vec![0u8; code.len()];
+            let mut vm = VM::new(&code, usize::MAX);
+            while vm.running() && visited[vm.ip] == 0 {
+                visited[vm.ip] += 1;
+                vm.exec();
+            }
+            vm.acc
+        });
+
+        assert_eq!(result, 1489);
+
+        let result = runner.bench("day 8, part 2", || {
+            let code = parse_code();
+            let mut visited = vec![0u8; code.len()];
+            'outer: for swap in code
+                .iter()
+                .enumerate()
+                .filter_map(|(i, instr)| match instr {
+                    Instruction::Acc(_) => None,
+                    _ => Some(i),
+                })
+            {
+                let mut vm = VM::new(&code, swap);
+                while vm.running() {
+                    if visited[vm.ip] != 0 {
+                        visited.fill(0);
+                        continue 'outer;
+                    }
+                    visited[vm.ip] += 1;
+                    vm.exec();
+                }
+                return vm.acc;
+            }
+            0
+        });
+
+        assert_eq!(result, 1539);
     }
 }

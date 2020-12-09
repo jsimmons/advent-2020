@@ -3,6 +3,7 @@
 #![feature(iterator_fold_self)]
 #![feature(str_split_once)]
 #![feature(slice_fill)]
+#![feature(array_windows)]
 
 pub mod counters;
 
@@ -603,5 +604,77 @@ fn main() {
         });
 
         assert_eq!(result, 1539);
+    }
+
+    // Day 9
+    {
+        let data = load_day(9);
+
+        let result = runner.bench("day 9, part 1", || {
+            let numbers = data
+                .lines()
+                .filter_map(|l| l.parse().ok())
+                .collect::<Vec<i32>>();
+
+            numbers
+                .array_windows()
+                .find_map(|x: &[i32; 26]| {
+                    let mut window = [0; 25];
+                    window.clone_from_slice(&x[..25]);
+                    let search = x[25];
+                    window.sort();
+
+                    let mut i = 0;
+                    let mut j = 24;
+                    let mut found = false;
+                    while i != j {
+                        match (window[j] + window[i]).cmp(&search) {
+                            Ordering::Less => i += 1,
+                            Ordering::Greater => j -= 1,
+                            Ordering::Equal => {
+                                found = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if !found {
+                        Some(search)
+                    } else {
+                        None
+                    }
+                })
+                .unwrap()
+        });
+
+        assert_eq!(result, 20874512);
+
+        let result = runner.bench("day 9, part 1", || {
+            let numbers = data
+                .lines()
+                .filter_map(|l| l.parse().ok())
+                .collect::<Vec<i32>>();
+
+            let target = 20874512;
+            let mut i = 0;
+            let mut j = 0;
+
+            loop {
+                let mut sum = 0;
+                while sum < target && j < numbers.len() {
+                    sum += numbers[j];
+                    j += 1;
+                }
+                if sum == target {
+                    break;
+                }
+                i += 1;
+                j = i;
+            }
+            let range = &numbers[i..j];
+            range.iter().min().unwrap() + range.iter().max().unwrap()
+        });
+
+        assert_eq!(result, 3012420);
     }
 }

@@ -659,7 +659,7 @@ fn main() {
             let mut i = 0;
             let mut j = 0;
 
-            loop {
+            while i < numbers.len() {
                 let mut sum = 0;
                 while sum < target && j < numbers.len() {
                     sum += numbers[j];

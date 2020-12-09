@@ -649,7 +649,7 @@ fn main() {
 
         assert_eq!(result, 20874512);
 
-        let result = runner.bench("day 9, part 1", || {
+        let result = runner.bench("day 9, part 2", || {
             let numbers = data
                 .lines()
                 .filter_map(|l| l.parse().ok())

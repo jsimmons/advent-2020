@@ -11,7 +11,7 @@ use std::{cmp::Ordering, collections::HashMap, fmt::Debug, time::Duration};
 
 use counters::Counter;
 
-fn load_day(day: i32) -> String {
+fn load_day(day: usize) -> String {
     let file_name = format!("data/{:02}.txt", day);
     std::fs::read_to_string(file_name).expect("unable to load data")
 }
@@ -182,7 +182,7 @@ fn day_01_part_2(data: &str) -> i64 {
 }
 
 #[inline(never)]
-fn day_02_part_1(data: &str) -> usize {
+fn day_02_part_1(data: &str) -> i64 {
     data.lines()
         .filter(|line| {
             let mut lexer = Lexer::new(line.as_bytes());
@@ -196,11 +196,11 @@ fn day_02_part_1(data: &str) -> usize {
             let count = password.iter().filter(|&&b| b == letter).count();
             count >= min && count <= max
         })
-        .count()
+        .count() as i64
 }
 
 #[inline(never)]
-fn day_02_part_2(data: &str) -> usize {
+fn day_02_part_2(data: &str) -> i64 {
     data.lines()
         .filter(|&line| {
             let mut lexer = Lexer::new(line.as_bytes());
@@ -213,19 +213,19 @@ fn day_02_part_2(data: &str) -> usize {
             let password = lexer.remaining();
             (password[i - 1] == letter) ^ (password[j - 1] == letter)
         })
-        .count()
+        .count() as i64
 }
 
 #[inline(never)]
-fn day_03_part_1(data: &str) -> usize {
+fn day_03_part_1(data: &str) -> i64 {
     data.lines()
         .enumerate()
         .filter(|&(i, row)| row.as_bytes()[(i * 3) % row.len()] == b'#')
-        .count()
+        .count() as i64
 }
 
 #[inline(never)]
-fn day_03_part_2(data: &str) -> u64 {
+fn day_03_part_2(data: &str) -> i64 {
     let lines = data
         .lines()
         .map(|line| {
@@ -247,7 +247,7 @@ fn day_03_part_2(data: &str) -> u64 {
                     (0b0100_0000_0000_0000_0000_0000_0000_0000, 0),
                     |(mask, count), &line| {
                         let tree = line & mask != 0;
-                        (rotr31(mask, dx), count + tree as u64)
+                        (rotr31(mask, dx), count + tree as i64)
                     },
                 )
                 .1
@@ -256,7 +256,7 @@ fn day_03_part_2(data: &str) -> u64 {
 }
 
 #[inline(never)]
-fn day_04_part_1(data: &str) -> usize {
+fn day_04_part_1(data: &str) -> i64 {
     data.split("\n\n")
         .filter(|&passport| {
             let mut lexer = Lexer::new(passport.as_bytes());
@@ -273,11 +273,11 @@ fn day_04_part_1(data: &str) -> usize {
             }
             valid_fields == 7
         })
-        .count()
+        .count() as i64
 }
 
 #[inline(never)]
-fn day_04_part_2(data: &str) -> usize {
+fn day_04_part_2(data: &str) -> i64 {
     data.split("\n\n")
         .filter(|&passport| {
             let mut lexer = Lexer::new(passport.as_bytes());
@@ -347,11 +347,11 @@ fn day_04_part_2(data: &str) -> usize {
 
             valid_count == 7
         })
-        .count()
+        .count() as i64
 }
 
 #[inline(never)]
-fn day_05_part_1(data: &str) -> u32 {
+fn day_05_part_1(data: &str) -> i64 {
     data.lines()
         .map(|line: &str| {
             let b = line.as_bytes();
@@ -367,11 +367,11 @@ fn day_05_part_1(data: &str) -> u32 {
                 | ((b[0] == b'B') as u32 | (b[0] == b'R') as u32) << 9
         })
         .max()
-        .unwrap()
+        .unwrap() as i64
 }
 
 #[inline(never)]
-fn day_05_part_2(data: &str) -> u32 {
+fn day_05_part_2(data: &str) -> i64 {
     let mut seats = data
         .lines()
         .map(|line: &str| {
@@ -398,11 +398,11 @@ fn day_05_part_2(data: &str) -> u32 {
                 None
             }
         })
-        .unwrap()
+        .unwrap() as i64
 }
 
 #[inline(never)]
-fn day_06_part_1(data: &str) -> u32 {
+fn day_06_part_1(data: &str) -> i64 {
     data.split("\n\n")
         .map(|g| {
             g.lines()
@@ -410,11 +410,11 @@ fn day_06_part_1(data: &str) -> u32 {
                 .fold(0, |acc, &elem| acc | 1u32 << (elem - b'a'))
                 .count_ones()
         })
-        .sum()
+        .sum::<u32>() as i64
 }
 
 #[inline(never)]
-fn day_06_part_2(data: &str) -> u32 {
+fn day_06_part_2(data: &str) -> i64 {
     data.split("\n\n")
         .map(|g| {
             g.lines()
@@ -427,7 +427,7 @@ fn day_06_part_2(data: &str) -> u32 {
                 .unwrap_or(0)
                 .count_ones()
         })
-        .sum()
+        .sum::<u32>() as i64
 }
 
 type Bags<'a> = HashMap<&'a str, Vec<(&'a str, u32)>>;
@@ -450,7 +450,7 @@ fn parse_bags(data: &str) -> Bags {
 }
 
 #[inline(never)]
-fn day_07_part_1(data: &str) -> usize {
+fn day_07_part_1(data: &str) -> i64 {
     fn has<'v, 'a>(v: &'v mut HashMap<&'a str, bool>, bags: &'a Bags, b: &'a str) -> bool {
         v.get(b).copied().unwrap_or_else(|| {
             let f = b == "shiny gold" || bags[b].iter().any(|(b, _)| has(v, bags, b));
@@ -460,16 +460,16 @@ fn day_07_part_1(data: &str) -> usize {
     }
     let bags = parse_bags(&data);
     let mut v = HashMap::new();
-    bags.keys().filter(|b| has(&mut v, &bags, b)).count() - 1
+    (bags.keys().filter(|b| has(&mut v, &bags, b)).count() - 1) as i64
 }
 
 #[inline(never)]
-fn day_07_part_2(data: &str) -> u32 {
+fn day_07_part_2(data: &str) -> i64 {
     fn count(bags: &Bags, b: &str) -> u32 {
         bags[b].iter().map(|(b, c)| c * count(bags, b)).sum::<u32>() + 1
     }
     let bags = parse_bags(&data);
-    count(&bags, "shiny gold") - 1
+    (count(&bags, "shiny gold") - 1) as i64
 }
 
 fn parse_code(data: &str) -> Vec<Instruction> {
@@ -533,7 +533,7 @@ impl<'c> VM<'c> {
 }
 
 #[inline(never)]
-fn day_08_part_1(data: &str) -> isize {
+fn day_08_part_1(data: &str) -> i64 {
     let code = parse_code(data);
     let mut visited = vec![0u8; code.len()];
     let mut vm = VM::new(&code, usize::MAX);
@@ -541,11 +541,11 @@ fn day_08_part_1(data: &str) -> isize {
         visited[vm.ip] += 1;
         vm.exec();
     }
-    vm.acc
+    vm.acc as i64
 }
 
 #[inline(never)]
-fn day_08_part_2(data: &str) -> isize {
+fn day_08_part_2(data: &str) -> i64 {
     let code = parse_code(data);
     let mut visited = vec![0u8; code.len()];
     'outer: for swap in code
@@ -565,13 +565,13 @@ fn day_08_part_2(data: &str) -> isize {
             visited[vm.ip] += 1;
             vm.exec();
         }
-        return vm.acc;
+        return vm.acc as i64;
     }
     0
 }
 
 #[inline(never)]
-fn day_09_part_1(data: &str) -> i32 {
+fn day_09_part_1(data: &str) -> i64 {
     let numbers = data
         .lines()
         .filter_map(|l| l.parse().ok())
@@ -596,11 +596,11 @@ fn day_09_part_1(data: &str) -> i32 {
                 None
             }
         })
-        .unwrap()
+        .unwrap() as i64
 }
 
 #[inline(never)]
-fn day_09_part_2(data: &str) -> i32 {
+fn day_09_part_2(data: &str) -> i64 {
     let numbers = data
         .lines()
         .filter_map(|l| l.parse().ok())
@@ -627,11 +627,11 @@ fn day_09_part_2(data: &str) -> i32 {
         min = min.min(i);
         max = max.max(i);
     }
-    min + max
+    (min + max) as i64
 }
 
 #[inline(never)]
-fn day_10_part_1(data: &str) -> i32 {
+fn day_10_part_1(data: &str) -> i64 {
     let mut numbers = data
         .lines()
         .filter_map(|l| l.parse().ok())
@@ -641,7 +641,7 @@ fn day_10_part_1(data: &str) -> i32 {
         ((numbers[0] == 1) as i32, (numbers[0] == 3) as i32),
         |(o, t), &[a, b]| (o + ((b - a) == 1) as i32, t + ((b - a) == 3) as i32),
     );
-    ones * (threes + 1)
+    (ones * (threes + 1)) as i64
 }
 
 #[inline(never)]
@@ -674,95 +674,41 @@ fn main() {
         "", "Result", "Duration", "Instructions",
     );
 
-    println!("{:-^1$}", "", 67);
+    println!("----------------+-----------------+-----------------+--------------");
 
-    // DAY 1
-    {
-        let data = load_day(1);
-        let result = runner.bench("day 1, part 1", || day_01_part_1(&data));
-        assert_eq!(result, 889779);
-        let result = runner.bench("day 1, part 2", || day_01_part_2(&data));
-        assert_eq!(result, 76110336);
-    }
+    let days = [
+        [day_01_part_1, day_01_part_2],
+        [day_02_part_1, day_02_part_2],
+        [day_03_part_1, day_03_part_2],
+        [day_04_part_1, day_04_part_2],
+        [day_05_part_1, day_05_part_2],
+        [day_06_part_1, day_06_part_2],
+        [day_07_part_1, day_07_part_2],
+        [day_08_part_1, day_08_part_2],
+        [day_09_part_1, day_09_part_2],
+        [day_10_part_1, day_10_part_2],
+    ];
 
-    // Day 2
-    {
-        let data = load_day(2);
-        let result = runner.bench("day 2, part 1", || day_02_part_1(&data));
-        assert_eq!(result, 560);
-        let result = runner.bench("day 2, part 2", || day_02_part_2(&data));
-        assert_eq!(result, 303);
-    }
+    let results = [
+        [889779, 76110336],
+        [560, 303],
+        [203, 3316272960],
+        [256, 198],
+        [896, 659],
+        [6885, 3550],
+        [238, 82930],
+        [1489, 1539],
+        [20874512, 3012420],
+        [2432, 453551299002368],
+    ];
 
-    // Day 3
-    {
-        let data = load_day(3);
-        let result = runner.bench("day 3, part 1", || day_03_part_1(&data));
-        assert_eq!(result, 203);
-        let result = runner.bench("day 3, part 2", || day_03_part_2(&data));
-        assert_eq!(result, 3316272960);
-    }
-
-    // Day 4
-    {
-        let data = load_day(4);
-        let result = runner.bench("day 4, part 1", || day_04_part_1(&data));
-        assert_eq!(result, 256);
-        let result = runner.bench("day 4, part 2", || day_04_part_2(&data));
-        assert_eq!(result, 198);
-    }
-
-    // Day 5
-    {
-        let data = load_day(5);
-        let result = runner.bench("day 5, part 1", || day_05_part_1(&data));
-        assert_eq!(result, 896);
-        let result = runner.bench("day 5, part 2", || day_05_part_2(&data));
-        assert_eq!(result, 659);
-    }
-
-    // Day 6
-    {
-        let data = load_day(6);
-        let result = runner.bench("day 6, part 1", || day_06_part_1(&data));
-        assert_eq!(result, 6885);
-        let result = runner.bench("day 6, part 2", || day_06_part_2(&data));
-        assert_eq!(result, 3550);
-    }
-
-    // Day 7
-    {
-        let data = load_day(7);
-        let result = runner.bench("day 7, part 1", || day_07_part_1(&data));
-        assert_eq!(result, 238);
-        let result = runner.bench("day 7, part 2", || day_07_part_2(&data));
-        assert_eq!(result, 82930);
-    }
-
-    // Day 8
-    {
-        let data = load_day(8);
-        let result = runner.bench("day 8, part 1", || day_08_part_1(&data));
-        assert_eq!(result, 1489);
-        let result = runner.bench("day 8, part 2", || day_08_part_2(&data));
-        assert_eq!(result, 1539);
-    }
-
-    // Day 9
-    {
-        let data = load_day(9);
-        let result = runner.bench("day 9, part 1", || day_09_part_1(&data));
-        assert_eq!(result, 20874512);
-        let result = runner.bench("day 9, part 2", || day_09_part_2(&data));
-        assert_eq!(result, 3012420);
-    }
-
-    // Day 10
-    {
-        let data = load_day(10);
-        let result = runner.bench("day 10, part 1", || day_10_part_1(&data));
-        assert_eq!(result, 2432);
-        let result = runner.bench("day 10, part 2", || day_10_part_2(&data));
-        assert_eq!(result, 453551299002368);
+    for (i, &[part_1, part_2]) in days.iter().enumerate() {
+        let day = i + 1;
+        let data = load_day(day);
+        let &[part_1_result, part_2_result] = &results[i];
+        let result = runner.bench(format!("day {:02}, part 1", day).as_str(), || part_1(&data));
+        assert_eq!(result, part_1_result);
+        let result = runner.bench(format!("        part 2").as_str(), || part_2(&data));
+        assert_eq!(result, part_2_result);
     }
 }

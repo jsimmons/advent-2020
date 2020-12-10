@@ -630,6 +630,42 @@ fn day_09_part_2(data: &str) -> i32 {
     min + max
 }
 
+#[inline(never)]
+fn day_10_part_1(data: &str) -> i32 {
+    let mut numbers = data
+        .lines()
+        .filter_map(|l| l.parse().ok())
+        .collect::<Vec<i32>>();
+    numbers.sort();
+    let (ones, threes) = numbers.array_windows().fold(
+        ((numbers[0] == 1) as i32, (numbers[0] == 3) as i32),
+        |(o, t), &[a, b]| (o + ((b - a) == 1) as i32, t + ((b - a) == 3) as i32),
+    );
+    ones * (threes + 1)
+}
+
+#[inline(never)]
+fn day_10_part_2(data: &str) -> i64 {
+    let mut numbers = data
+        .lines()
+        .filter_map(|l| l.parse().ok())
+        .collect::<Vec<i64>>();
+    numbers.sort();
+    let target = numbers.last().unwrap() + 3;
+    numbers.push(target);
+    let mut map = HashMap::new();
+    map.insert(0, 1);
+    for n in numbers {
+        map.insert(
+            n,
+            map.get(&(n - 1)).unwrap_or(&0)
+                + map.get(&(n - 2)).unwrap_or(&0)
+                + map.get(&(n - 3)).unwrap_or(&0),
+        );
+    }
+    map[&target]
+}
+
 fn main() {
     let runner = Runner::new();
 
@@ -719,5 +755,14 @@ fn main() {
         assert_eq!(result, 20874512);
         let result = runner.bench("day 9, part 2", || day_09_part_2(&data));
         assert_eq!(result, 3012420);
+    }
+
+    // Day 10
+    {
+        let data = load_day(10);
+        let result = runner.bench("day 10, part 1", || day_10_part_1(&data));
+        assert_eq!(result, 2432);
+        let result = runner.bench("day 10, part 2", || day_10_part_2(&data));
+        assert_eq!(result, 453551299002368);
     }
 }

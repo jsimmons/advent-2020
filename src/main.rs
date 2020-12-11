@@ -16,10 +16,6 @@ fn load_day(day: usize) -> String {
     std::fs::read_to_string(file_name).expect("unable to load data")
 }
 
-fn clamp(x: i32, min: i32, max: i32) -> i32 {
-    x.min(max).max(min)
-}
-
 struct Runner {
     time_counter: Counter,
     inst_counter: Counter,
@@ -728,10 +724,7 @@ fn day_11_part_1(data: &str) -> i64 {
         changed
     };
 
-    loop {
-        if step(&seats, &mut tmp) == false {
-            break;
-        }
+    while step(&seats, &mut tmp) {
         std::mem::swap(&mut seats, &mut tmp);
     }
     seats.iter().copied().filter(|&b| b == b'#').count() as i64
@@ -807,10 +800,7 @@ fn day_11_part_2(data: &str) -> i64 {
         changed
     };
 
-    loop {
-        if step(&seats, &mut tmp) == false {
-            break;
-        }
+    while step(&seats, &mut tmp) {
         std::mem::swap(&mut seats, &mut tmp);
     }
     seats.iter().copied().filter(|&b| b == b'#').count() as i64

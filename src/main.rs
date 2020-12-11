@@ -16,6 +16,10 @@ fn load_day(day: usize) -> String {
     std::fs::read_to_string(file_name).expect("unable to load data")
 }
 
+fn clamp(x: i32, min: i32, max: i32) -> i32 {
+    x.min(max).max(min)
+}
+
 struct Runner {
     time_counter: Counter,
     inst_counter: Counter,
@@ -666,6 +670,152 @@ fn day_10_part_2(data: &str) -> i64 {
     map[&target]
 }
 
+#[inline(never)]
+fn day_11_part_1(data: &str) -> i64 {
+    const W: i32 = 95;
+    const H: i32 = 95;
+
+    let mut seats: Vec<u8> = data
+        .as_bytes()
+        .iter()
+        .copied()
+        .filter(|&b| b != b'\n')
+        .collect();
+    assert_eq!(seats.len(), (W * H) as usize);
+    let mut tmp = seats.clone();
+
+    fn step(seats: &[u8], tmp: &mut [u8]) -> bool {
+        let read = |x, y| {
+            if x < 0 || x >= W || y < 0 || y >= H {
+                0
+            } else {
+                seats[(y * W + x) as usize]
+            }
+        };
+        let mut write = |x, y, v| tmp[(y * W + x) as usize] = v;
+        let mut changed = false;
+        for y in 0..H {
+            for x in 0..W {
+                let chair = read(x, y);
+
+                if chair == b'.' {
+                    continue;
+                }
+
+                let occupied = |dx: i32, dy: i32| (read(x + dx, y + dy) == b'#') as i32;
+                let count = occupied(-1, -1)
+                    + occupied(0, -1)
+                    + occupied(1, -1)
+                    + occupied(-1, 0)
+                    + occupied(1, 0)
+                    + occupied(-1, 1)
+                    + occupied(0, 1)
+                    + occupied(1, 1);
+
+                let chair = if chair == b'L' && count == 0 {
+                    changed = true;
+                    b'#'
+                } else if chair == b'#' && count >= 4 {
+                    changed = true;
+                    b'L'
+                } else {
+                    chair
+                };
+
+                write(x, y, chair);
+            }
+        }
+        changed
+    };
+
+    loop {
+        if step(&seats, &mut tmp) == false {
+            break;
+        }
+        std::mem::swap(&mut seats, &mut tmp);
+    }
+    seats.iter().copied().filter(|&b| b == b'#').count() as i64
+}
+
+#[inline(never)]
+fn day_11_part_2(data: &str) -> i64 {
+    const W: i32 = 95;
+    const H: i32 = 95;
+
+    let mut seats: Vec<u8> = data
+        .as_bytes()
+        .iter()
+        .copied()
+        .filter(|&b| b != b'\n')
+        .collect();
+    assert_eq!(seats.len(), (W * H) as usize);
+    let mut tmp = seats.clone();
+
+    fn step(seats: &[u8], tmp: &mut [u8]) -> bool {
+        let read = |x, y| {
+            if x < 0 || x >= W || y < 0 || y >= H {
+                0
+            } else {
+                seats[(y * W + x) as usize]
+            }
+        };
+        let mut write = |x, y, v| tmp[(y * W + x) as usize] = v;
+        let mut changed = false;
+        for y in 0..H {
+            for x in 0..W {
+                let chair = read(x, y);
+
+                if chair == b'.' {
+                    continue;
+                }
+
+                let occupied = |dx, dy| {
+                    let mut x = x;
+                    let mut y = y;
+                    loop {
+                        x += dx;
+                        y += dy;
+                        match read(x, y) {
+                            b'#' => return 1,
+                            b'L' | 0 => return 0,
+                            _ => continue,
+                        }
+                    }
+                };
+                let count = occupied(-1, -1)
+                    + occupied(0, -1)
+                    + occupied(1, -1)
+                    + occupied(-1, 0)
+                    + occupied(1, 0)
+                    + occupied(-1, 1)
+                    + occupied(0, 1)
+                    + occupied(1, 1);
+
+                let chair = if chair == b'L' && count == 0 {
+                    changed = true;
+                    b'#'
+                } else if chair == b'#' && count >= 5 {
+                    changed = true;
+                    b'L'
+                } else {
+                    chair
+                };
+
+                write(x, y, chair);
+            }
+        }
+        changed
+    };
+
+    loop {
+        if step(&seats, &mut tmp) == false {
+            break;
+        }
+        std::mem::swap(&mut seats, &mut tmp);
+    }
+    seats.iter().copied().filter(|&b| b == b'#').count() as i64
+}
+
 fn main() {
     let runner = Runner::new();
 
@@ -687,6 +837,7 @@ fn main() {
         [day_08_part_1, day_08_part_2],
         [day_09_part_1, day_09_part_2],
         [day_10_part_1, day_10_part_2],
+        [day_11_part_1, day_11_part_2],
     ];
 
     let results = [
@@ -700,6 +851,7 @@ fn main() {
         [1489, 1539],
         [20874512, 3012420],
         [2432, 453551299002368],
+        [2361, 2119],
     ];
 
     for (i, &[part_1, part_2]) in days.iter().enumerate() {

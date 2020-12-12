@@ -806,6 +806,65 @@ fn day_11_part_2(data: &str) -> i64 {
     seats.iter().copied().filter(|&b| b == b'#').count() as i64
 }
 
+#[inline(never)]
+fn day_12_part_1(data: &str) -> i64 {
+    let (x, y, _) = data.lines().fold((0, 0, 0), |(x, y, h), line| {
+        let arg = line[1..].parse::<i64>().unwrap();
+        match line.as_bytes()[0] {
+            b'N' => (x, y + arg, h),
+            b'S' => (x, y - arg, h),
+            b'E' => (x + arg, y, h),
+            b'W' => (x - arg, y, h),
+            b'L' => (x, y, h - arg),
+            b'R' => (x, y, h + arg),
+            b'F' => match h.rem_euclid(360) {
+                0 => (x + arg, y, h),   // E
+                90 => (x, y - arg, h),  // S
+                180 => (x - arg, y, h), // W
+                270 => (x, y + arg, h), // N
+                _ => panic!(),
+            },
+            _ => panic!(),
+        }
+    });
+    x.abs() + y.abs()
+}
+
+#[inline(never)]
+fn day_12_part_2(data: &str) -> i64 {
+    let (x, y, _, _) = data
+        .lines()
+        .fold((0, 0, 10, 1), |(x, y, way_x, way_y), line| {
+            let arg = line[1..].parse::<i64>().unwrap();
+            fn rotate(x: i64, y: i64, theta: i64) -> (i64, i64) {
+                match theta {
+                    0 => (x, y),
+                    90 => (y, -x),
+                    180 => (-x, -y),
+                    270 => (-y, x),
+                    _ => panic!(),
+                }
+            }
+            match line.as_bytes()[0] {
+                b'N' => (x, y, way_x, way_y + arg),
+                b'S' => (x, y, way_x, way_y - arg),
+                b'E' => (x, y, way_x + arg, way_y),
+                b'W' => (x, y, way_x - arg, way_y),
+                b'L' => {
+                    let (way_x, way_y) = rotate(way_x, way_y, 360 - arg);
+                    (x, y, way_x, way_y)
+                }
+                b'R' => {
+                    let (way_x, way_y) = rotate(way_x, way_y, arg);
+                    (x, y, way_x, way_y)
+                }
+                b'F' => (x + way_x * arg, y + way_y * arg, way_x, way_y),
+                _ => panic!(),
+            }
+        });
+    x.abs() + y.abs()
+}
+
 fn main() {
     let runner = Runner::new();
 
@@ -828,6 +887,7 @@ fn main() {
         [day_09_part_1, day_09_part_2],
         [day_10_part_1, day_10_part_2],
         [day_11_part_1, day_11_part_2],
+        [day_12_part_1, day_12_part_2],
     ];
 
     let results = [
@@ -842,6 +902,7 @@ fn main() {
         [20874512, 3012420],
         [2432, 453551299002368],
         [2361, 2119],
+        [381, 28591],
     ];
 
     for (i, &[part_1, part_2]) in days.iter().enumerate() {

@@ -865,6 +865,75 @@ fn day_12_part_2(data: &str) -> i64 {
     x.abs() + y.abs()
 }
 
+#[inline(never)]
+fn day_13_part_1(data: &str) -> i64 {
+    let mut lines = data.lines();
+    let earliest_timestamp = lines.next().unwrap().parse::<i64>().unwrap();
+    let (wait_time, bus_id) = lines
+        .next()
+        .unwrap()
+        .split(',')
+        .filter_map(|s| {
+            let bus_id = s.parse::<i64>().ok()?;
+            Some((
+                ((earliest_timestamp + bus_id - 1) / bus_id) * bus_id - earliest_timestamp,
+                bus_id,
+            ))
+        })
+        .min_by_key(|(wait_time, _)| *wait_time)
+        .unwrap();
+    wait_time * bus_id
+}
+
+fn gcd(mut u: u64, mut v: u64) -> u64 {
+    if u == 0 {
+        return v;
+    } else if v == 0 {
+        return u;
+    }
+    let i = u.trailing_zeros();
+    u >>= i;
+    let j = v.trailing_zeros();
+    v >>= j;
+    let k = std::cmp::min(i, j);
+    loop {
+        if u > v {
+            std::mem::swap(&mut u, &mut v);
+        }
+        v -= u;
+        if v == 0 {
+            return u << k;
+        }
+        v >>= v.trailing_zeros();
+    }
+}
+
+fn lcm(a: u64, b: u64) -> u64 {
+    a * (b / gcd(a, b))
+}
+
+#[inline(never)]
+fn day_13_part_2(data: &str) -> i64 {
+    let mut step = 1;
+    let mut ts = 0;
+
+    for (offset, bus_id) in data
+        .lines()
+        .nth(1)
+        .unwrap()
+        .split(',')
+        .enumerate()
+        .filter_map(|(i, s)| Some((i as u64, s.parse::<u64>().ok()?)))
+    {
+        while (ts + offset) % bus_id != 0 {
+            ts += step;
+        }
+        step = lcm(step, bus_id);
+    }
+
+    ts as i64
+}
+
 fn main() {
     let runner = Runner::new();
 
@@ -888,6 +957,7 @@ fn main() {
         [day_10_part_1, day_10_part_2],
         [day_11_part_1, day_11_part_2],
         [day_12_part_1, day_12_part_2],
+        [day_13_part_1, day_13_part_2],
     ];
 
     let results = [
@@ -903,6 +973,7 @@ fn main() {
         [2432, 453551299002368],
         [2361, 2119],
         [381, 28591],
+        [410, 600691418730595],
     ];
 
     for (i, &[part_1, part_2]) in days.iter().enumerate() {

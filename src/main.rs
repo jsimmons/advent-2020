@@ -868,17 +868,14 @@ fn day_12_part_2(data: &str) -> i64 {
 #[inline(never)]
 fn day_13_part_1(data: &str) -> i64 {
     let mut lines = data.lines();
-    let earliest_timestamp = lines.next().unwrap().parse::<i64>().unwrap();
+    let ts = lines.next().unwrap().parse::<i64>().unwrap();
     let (wait_time, bus_id) = lines
         .next()
         .unwrap()
         .split(',')
         .filter_map(|s| {
             let bus_id = s.parse::<i64>().ok()?;
-            Some((
-                ((earliest_timestamp + bus_id - 1) / bus_id) * bus_id - earliest_timestamp,
-                bus_id,
-            ))
+            Some((((ts + bus_id - 1) / bus_id) * bus_id - ts, bus_id))
         })
         .min_by_key(|(wait_time, _)| *wait_time)
         .unwrap();

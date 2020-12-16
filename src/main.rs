@@ -1021,6 +1021,64 @@ fn day_14_part_2(data: &str) -> i64 {
     mem.values().sum::<u64>() as i64
 }
 
+#[inline(never)]
+fn day_15_part_1(data: &str) -> i64 {
+    let starting_numbers = data
+        .split(',')
+        .map(|n| n.parse::<u32>().unwrap())
+        .collect::<Vec<_>>();
+
+    let mut numbers_played = vec![0; 2020];
+    let mut last_played = *starting_numbers.first().unwrap();
+    for turn in 2..=starting_numbers.len() {
+        numbers_played[last_played as usize] = turn;
+        last_played = starting_numbers[turn - 1];
+    }
+
+    for turn in starting_numbers.len() + 1..=2020 {
+        let last_heard = numbers_played[last_played as usize];
+        let announce = if last_heard != 0 {
+            (turn - last_heard) as u32
+        } else {
+            0
+        };
+        numbers_played[last_played as usize] = turn;
+        last_played = announce;
+    }
+
+    last_played as i64
+}
+
+#[inline(never)]
+fn day_15_part_2(data: &str) -> i64 {
+    let starting_numbers = data
+        .split(',')
+        .map(|n| n.parse::<u32>().unwrap())
+        .collect::<Vec<_>>();
+
+    let mut numbers_played = vec![0; 30000000];
+    let mut last_played = *starting_numbers.first().unwrap();
+    for turn in 2..=starting_numbers.len() {
+        let turn = turn as u32;
+        numbers_played[last_played as usize] = turn;
+        last_played = starting_numbers[(turn - 1) as usize];
+    }
+
+    for turn in starting_numbers.len() + 1..=30000000 {
+        let turn = turn as u32;
+        let last_heard = numbers_played[last_played as usize];
+        numbers_played[last_played as usize] = turn;
+        let announce = if last_heard != 0 {
+            turn - last_heard
+        } else {
+            0
+        };
+        last_played = announce;
+    }
+
+    last_played as i64
+}
+
 fn main() {
     let runner = Runner::new();
 
@@ -1046,6 +1104,7 @@ fn main() {
         [day_12_part_1, day_12_part_2],
         [day_13_part_1, day_13_part_2],
         [day_14_part_1, day_14_part_2],
+        [day_15_part_1, day_15_part_2],
     ];
 
     let results = [
@@ -1063,6 +1122,7 @@ fn main() {
         [381, 28591],
         [410, 600691418730595],
         [13105044880745, 3505392154485],
+        [421, 436],
     ];
 
     for (i, &[part_1, part_2]) in days.iter().enumerate() {

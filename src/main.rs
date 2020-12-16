@@ -7,13 +7,26 @@
 
 pub mod counters;
 
-use std::{cmp::Ordering, collections::HashMap, fmt::Debug, time::Duration};
+use std::{
+    cmp::Ordering,
+    collections::{hash_map::DefaultHasher, HashMap},
+    convert::TryInto,
+    fmt::Debug,
+    hash::Hasher,
+    time::Duration,
+};
 
 use counters::Counter;
 
 fn load_day(day: usize) -> String {
     let file_name = format!("data/{:02}.txt", day);
     std::fs::read_to_string(file_name).expect("unable to load data")
+}
+
+fn hash_bytes(bytes: &[u8]) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    hasher.write(bytes);
+    hasher.finish()
 }
 
 struct Runner {
@@ -668,66 +681,63 @@ fn day_10_part_2(data: &str) -> i64 {
 
 #[inline(never)]
 fn day_11_part_1(data: &str) -> i64 {
-    const W: i32 = 95;
-    const H: i32 = 95;
+    const FLOOR: u8 = 0;
+    const EMPTY: u8 = 1;
+    const FULL: u8 = 2;
+    const W: usize = 95;
+    const H: usize = 95;
+    const TRANSITIONS: [u8; 27] = [
+        FLOOR, FLOOR, FLOOR, FLOOR, FLOOR, FLOOR, FLOOR, FLOOR, FLOOR, FULL, EMPTY, EMPTY, EMPTY,
+        EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, FULL, FULL, FULL, FULL, EMPTY, EMPTY, EMPTY, EMPTY,
+        EMPTY,
+    ];
 
-    let mut seats: Vec<u8> = data
-        .as_bytes()
-        .iter()
-        .copied()
-        .filter(|&b| b != b'\n')
-        .collect();
-    assert_eq!(seats.len(), (W * H) as usize);
-    let mut tmp = seats.clone();
-
-    fn step(seats: &[u8], tmp: &mut [u8]) -> bool {
-        let read = |x, y| {
-            if x < 0 || x >= W || y < 0 || y >= H {
-                0
-            } else {
-                seats[(y * W + x) as usize]
-            }
-        };
-        let mut write = |x, y, v| tmp[(y * W + x) as usize] = v;
-        let mut changed = false;
-        for y in 0..H {
-            for x in 0..W {
-                let chair = read(x, y);
-
-                if chair == b'.' {
-                    continue;
-                }
-
-                let occupied = |dx: i32, dy: i32| (read(x + dx, y + dy) == b'#') as i32;
-                let count = occupied(-1, -1)
-                    + occupied(0, -1)
-                    + occupied(1, -1)
-                    + occupied(-1, 0)
-                    + occupied(1, 0)
-                    + occupied(-1, 1)
-                    + occupied(0, 1)
-                    + occupied(1, 1);
-
-                let chair = if chair == b'L' && count == 0 {
-                    changed = true;
-                    b'#'
-                } else if chair == b'#' && count >= 4 {
-                    changed = true;
-                    b'L'
-                } else {
-                    chair
-                };
-
-                write(x, y, chair);
+    let mut seats = [FLOOR; (W + 2) * (H + 2)];
+    for (i, line) in data.lines().enumerate() {
+        let mut tmp: [u8; W] = line.as_bytes().try_into().unwrap();
+        for b in tmp.iter_mut() {
+            *b = match *b {
+                b'L' => EMPTY,
+                b'#' => FULL,
+                _ => FLOOR,
             }
         }
-        changed
-    };
-
-    while step(&seats, &mut tmp) {
-        std::mem::swap(&mut seats, &mut tmp);
+        seats[(i + 1) * (W + 2) + 1..(i + 2) * (W + 2) - 1].copy_from_slice(&tmp);
     }
-    seats.iter().copied().filter(|&b| b == b'#').count() as i64
+
+    let mut tmp = [0; (W + 2) * (H + 2)];
+    let mut top = Box::new([0u8; W + 2]);
+    let mut mid = Box::new([0u8; W + 2]);
+    let mut bot = Box::new([0u8; W + 2]);
+    let mut hash = 0;
+    loop {
+        for (i, &[a, b, c]) in seats.array_windows().enumerate() {
+            tmp[i + 1] = ((a == FULL) as u8) + ((b == FULL) as u8) + ((c == FULL) as u8);
+        }
+
+        top.copy_from_slice(&tmp[0..W + 2]);
+        mid.copy_from_slice(&tmp[W + 2..2 * (W + 2)]);
+        for y in 1..H + 1 {
+            bot.copy_from_slice(&tmp[(y + 1) * (W + 2)..(y + 2) * (W + 2)]);
+            for x in 0..W + 2 {
+                tmp[y * (W + 2) + x] = top[x] + mid[x] + bot[x];
+            }
+            std::mem::swap(&mut top, &mut mid);
+            std::mem::swap(&mut mid, &mut bot);
+        }
+
+        for (seat, count) in seats.iter_mut().zip(tmp.iter()) {
+            let index = (*seat * 9 + count - (*seat == FULL) as u8) as usize;
+            *seat = TRANSITIONS[index];
+        }
+
+        let old_hash = hash;
+        hash = hash_bytes(&seats);
+        if hash == old_hash {
+            break;
+        }
+    }
+    seats.iter().copied().filter(|&b| b == FULL).count() as i64
 }
 
 #[inline(never)]
@@ -931,6 +941,86 @@ fn day_13_part_2(data: &str) -> i64 {
     ts as i64
 }
 
+#[inline(never)]
+fn day_14_part_1(data: &str) -> i64 {
+    let mut mask_and = !0;
+    let mut mask_or = 0;
+    let mut mem = HashMap::new();
+    for line in data.lines() {
+        let mut iter = line.split(" = ");
+        let address = iter.next().unwrap();
+        let value = iter.next().unwrap();
+
+        if address == "mask" {
+            let (zeroes, ones) =
+                value
+                    .as_bytes()
+                    .iter()
+                    .enumerate()
+                    .fold((0, 0), |(z, o), (i, &b)| {
+                        let zero = (b == b'0') as u64;
+                        let one = (b == b'1') as u64;
+                        (z | zero << (35 - i), o | one << (35 - i))
+                    });
+            mask_and = !zeroes;
+            mask_or = ones;
+            continue;
+        } else {
+            let value = value.parse::<u64>().unwrap();
+            mem.insert(address, value & mask_and | mask_or);
+        }
+    }
+    mem.values().sum::<u64>() as i64
+}
+
+#[inline(never)]
+fn day_14_part_2(data: &str) -> i64 {
+    fn permutations<F: FnMut(&mut HashMap<u64, u64>, u64) + Copy>(
+        float: u64,
+        ones: u64,
+        mem: &mut HashMap<u64, u64>,
+        mut f: F,
+    ) {
+        let top_bit = 63 - float.leading_zeros();
+        let float = float & !(1 << top_bit);
+        if float == 0 {
+            f(mem, ones);
+            f(mem, ones | (1 << top_bit));
+        } else {
+            permutations(float, ones, mem, f);
+            permutations(float, ones | (1 << top_bit), mem, f);
+        }
+    }
+    let mut mem = HashMap::new();
+    let mut ones: u64 = 0;
+    let mut floats: u64 = 0;
+    for line in data.lines() {
+        let mut iter = line.split(" = ");
+        let address = iter.next().unwrap();
+        let value = iter.next().unwrap();
+        if address == "mask" {
+            let (o, f) = value
+                .as_bytes()
+                .iter()
+                .enumerate()
+                .fold((0, 0), |(o, f), (i, &b)| {
+                    let one = (b == b'1') as u64;
+                    let float = (b == b'X') as u64;
+                    (o | one << (35 - i), f | float << (35 - i))
+                });
+            ones = o;
+            floats = f;
+        } else {
+            let address = address[4..address.len() - 1].parse::<u64>().unwrap() & !floats;
+            let value = value.parse::<u64>().unwrap();
+            permutations(floats, ones, &mut mem, |mem, ones| {
+                mem.insert(address | ones, value);
+            });
+        }
+    }
+    mem.values().sum::<u64>() as i64
+}
+
 fn main() {
     let runner = Runner::new();
 
@@ -955,6 +1045,7 @@ fn main() {
         [day_11_part_1, day_11_part_2],
         [day_12_part_1, day_12_part_2],
         [day_13_part_1, day_13_part_2],
+        [day_14_part_1, day_14_part_2],
     ];
 
     let results = [
@@ -971,6 +1062,7 @@ fn main() {
         [2361, 2119],
         [381, 28591],
         [410, 600691418730595],
+        [13105044880745, 3505392154485],
     ];
 
     for (i, &[part_1, part_2]) in days.iter().enumerate() {

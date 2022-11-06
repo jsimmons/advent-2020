@@ -1,10 +1,3 @@
-#![cfg_attr(feature = "nightly", feature(asm))]
-#![feature(test)]
-#![feature(iterator_fold_self)]
-#![feature(str_split_once)]
-#![feature(slice_fill)]
-#![feature(array_windows)]
-
 pub mod counters;
 
 use std::{
@@ -13,10 +6,160 @@ use std::{
     convert::TryInto,
     fmt::Debug,
     hash::Hasher,
+    marker::PhantomData,
     time::Duration,
 };
 
 use counters::Counter;
+
+#[macro_use]
+extern crate log;
+
+// Some unstable code from rust stdlib.
+
+/// A windowed iterator over a slice in overlapping chunks (`N` elements at a
+/// time), starting at the beginning of the slice
+///
+/// This struct is created by the [`array_windows`] method on [slices].
+///
+/// # Example
+///
+/// ```
+/// use narcissus_core::slice::array_windows;
+///
+/// let slice = [0, 1, 2, 3];
+/// let iter = array_windows::<_, 2>(&slice);
+/// ```
+///
+/// [`array_windows`]: slice::array_windows
+/// [slices]: slice
+#[derive(Debug, Clone, Copy)]
+#[must_use = "iterators are lazy and do nothing unless consumed"]
+pub struct ArrayWindows<'a, T: 'a, const N: usize> {
+    slice_head: *const T,
+    num: usize,
+    marker: PhantomData<&'a [T; N]>,
+}
+
+impl<'a, T: 'a, const N: usize> ArrayWindows<'a, T, N> {
+    #[inline]
+    pub fn new(slice: &'a [T]) -> Self {
+        let num_windows = slice.len().saturating_sub(N - 1);
+        Self {
+            slice_head: slice.as_ptr(),
+            num: num_windows,
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<'a, T, const N: usize> Iterator for ArrayWindows<'a, T, N> {
+    type Item = &'a [T; N];
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.num == 0 {
+            return None;
+        }
+        // SAFETY:
+        // This is safe because it's indexing into a slice guaranteed to be length > N.
+        let ret = unsafe { &*self.slice_head.cast::<[T; N]>() };
+        // SAFETY: Guaranteed that there are at least 1 item remaining otherwise
+        // earlier branch would've been hit
+        self.slice_head = unsafe { self.slice_head.add(1) };
+
+        self.num -= 1;
+        Some(ret)
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.num, Some(self.num))
+    }
+
+    #[inline]
+    fn count(self) -> usize {
+        self.num
+    }
+
+    #[inline]
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        if self.num <= n {
+            self.num = 0;
+            return None;
+        }
+        // SAFETY:
+        // This is safe because it's indexing into a slice guaranteed to be length > N.
+        let ret = unsafe { &*self.slice_head.add(n).cast::<[T; N]>() };
+        // SAFETY: Guaranteed that there are at least n items remaining
+        self.slice_head = unsafe { self.slice_head.add(n + 1) };
+
+        self.num -= n + 1;
+        Some(ret)
+    }
+
+    #[inline]
+    fn last(mut self) -> Option<Self::Item> {
+        self.nth(self.num.checked_sub(1)?)
+    }
+}
+
+impl<'a, T, const N: usize> DoubleEndedIterator for ArrayWindows<'a, T, N> {
+    #[inline]
+    fn next_back(&mut self) -> Option<&'a [T; N]> {
+        if self.num == 0 {
+            return None;
+        }
+        // SAFETY: Guaranteed that there are n items remaining, n-1 for 0-indexing.
+        let ret = unsafe { &*self.slice_head.add(self.num - 1).cast::<[T; N]>() };
+        self.num -= 1;
+        Some(ret)
+    }
+
+    #[inline]
+    fn nth_back(&mut self, n: usize) -> Option<&'a [T; N]> {
+        if self.num <= n {
+            self.num = 0;
+            return None;
+        }
+        // SAFETY: Guaranteed that there are n items remaining, n-1 for 0-indexing.
+        let ret = unsafe { &*self.slice_head.add(self.num - (n + 1)).cast::<[T; N]>() };
+        self.num -= n + 1;
+        Some(ret)
+    }
+}
+
+/// Returns an iterator over overlapping windows of `N` elements of  a slice,
+/// starting at the beginning of the slice.
+///
+/// This is the const generic equivalent of [`windows`].
+///
+/// If `N` is greater than the size of the slice, it will return no windows.
+///
+/// # Panics
+///
+/// Panics if `N` is 0. This check will most probably get changed to a compile time
+/// error before this method gets stabilized.
+///
+/// # Examples
+///
+/// ```
+/// use narcissus_core::slice::array_windows;
+///
+/// let slice = [0, 1, 2, 3];
+/// let mut iter = array_windows(&slice);
+/// assert_eq!(iter.next().unwrap(), &[0, 1]);
+/// assert_eq!(iter.next().unwrap(), &[1, 2]);
+/// assert_eq!(iter.next().unwrap(), &[2, 3]);
+/// assert!(iter.next().is_none());
+/// ```
+///
+/// [`windows`]: slice::windows
+#[inline]
+pub fn array_windows<T, const N: usize>(slice: &[T]) -> ArrayWindows<'_, T, N> {
+    assert_ne!(N, 0);
+    ArrayWindows::new(slice)
+}
 
 fn load_day(day: usize) -> String {
     let file_name = format!("data/{:02}.txt", day);
@@ -274,7 +417,7 @@ fn day_04_part_1(data: &str) -> i64 {
         .filter(|&passport| {
             let mut lexer = Lexer::new(passport.as_bytes());
             let mut valid_fields = 0;
-            while lexer.is_empty() == false {
+            while !lexer.is_empty() {
                 match lexer.field() {
                     b"byr" | b"iyr" | b"eyr" | b"hgt" | b"hcl" | b"ecl" | b"pid" => {
                         valid_fields += 1;
@@ -311,7 +454,7 @@ fn day_04_part_2(data: &str) -> i64 {
             };
 
             let mut valid_count = 0;
-            while lexer.is_empty() == false {
+            while !lexer.is_empty() {
                 let valid = match lexer.field() {
                     b"byr" => valid_num_4(lexer.field(), 1920, 2002),
                     b"iyr" => valid_num_4(lexer.field(), 2010, 2020),
@@ -324,24 +467,19 @@ fn day_04_part_2(data: &str) -> i64 {
                     b"hcl" => match lexer.field() {
                         [b'#', digits @ ..] => {
                             digits.len() == 6
-                                && digits.iter().all(|&b| match b {
-                                    b'0'..=b'9' | b'a'..=b'f' => true,
-                                    _ => false,
-                                })
+                                && digits
+                                    .iter()
+                                    .all(|&b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
                         }
                         _ => false,
                     },
-                    b"ecl" => match lexer.field() {
-                        b"amb" | b"blu" | b"brn" | b"gry" | b"grn" | b"hzl" | b"oth" => true,
-                        _ => false,
-                    },
+                    b"ecl" => matches!(
+                        lexer.field(),
+                        b"amb" | b"blu" | b"brn" | b"gry" | b"grn" | b"hzl" | b"oth"
+                    ),
                     b"pid" => {
                         let field = lexer.field();
-                        field.len() == 9
-                            && field.iter().all(|&b| match b {
-                                b'0'..=b'9' => true,
-                                _ => false,
-                            })
+                        field.len() == 9 && field.iter().all(|&b| matches!(b, b'0'..=b'9'))
                     }
                     b"cid" => {
                         let _ = lexer.field();
@@ -368,7 +506,7 @@ fn day_05_part_1(data: &str) -> i64 {
     data.lines()
         .map(|line: &str| {
             let b = line.as_bytes();
-            ((b[9] == b'B') as u32 | (b[9] == b'R') as u32) << 0
+            ((b[9] == b'B') as u32 | (b[9] == b'R') as u32)
                 | ((b[8] == b'B') as u32 | (b[8] == b'R') as u32) << 1
                 | ((b[7] == b'B') as u32 | (b[7] == b'R') as u32) << 2
                 | ((b[6] == b'B') as u32 | (b[6] == b'R') as u32) << 3
@@ -389,7 +527,7 @@ fn day_05_part_2(data: &str) -> i64 {
         .lines()
         .map(|line: &str| {
             let b = line.as_bytes();
-            ((b[9] == b'B') as u32 | (b[9] == b'R') as u32) << 0
+            ((b[9] == b'B') as u32 | (b[9] == b'R') as u32)
                 | ((b[8] == b'B') as u32 | (b[8] == b'R') as u32) << 1
                 | ((b[7] == b'B') as u32 | (b[7] == b'R') as u32) << 2
                 | ((b[6] == b'B') as u32 | (b[6] == b'R') as u32) << 3
@@ -436,7 +574,7 @@ fn day_06_part_2(data: &str) -> i64 {
                         .iter()
                         .fold(0, |acc, &elem| acc | 1u32 << (elem - b'a'))
                 })
-                .fold_first(|acc, elem| acc & elem)
+                .reduce(|acc, elem| acc & elem)
                 .unwrap_or(0)
                 .count_ones()
         })
@@ -471,7 +609,7 @@ fn day_07_part_1(data: &str) -> i64 {
             f
         })
     }
-    let bags = parse_bags(&data);
+    let bags = parse_bags(data);
     let mut v = HashMap::new();
     (bags.keys().filter(|b| has(&mut v, &bags, b)).count() - 1) as i64
 }
@@ -481,7 +619,7 @@ fn day_07_part_2(data: &str) -> i64 {
     fn count(bags: &Bags, b: &str) -> u32 {
         bags[b].iter().map(|(b, c)| c * count(bags, b)).sum::<u32>() + 1
     }
-    let bags = parse_bags(&data);
+    let bags = parse_bags(data);
     (count(&bags, "shiny gold") - 1) as i64
 }
 
@@ -590,8 +728,7 @@ fn day_09_part_1(data: &str) -> i64 {
         .filter_map(|l| l.parse().ok())
         .collect::<Vec<i32>>();
 
-    numbers
-        .array_windows()
+    array_windows(&numbers)
         .find_map(|window: &[i32; 26]| {
             let search = window[25];
             let mut found = false;
@@ -650,7 +787,7 @@ fn day_10_part_1(data: &str) -> i64 {
         .filter_map(|l| l.parse().ok())
         .collect::<Vec<i32>>();
     numbers.sort();
-    let (ones, threes) = numbers.array_windows().fold(
+    let (ones, threes) = array_windows(&numbers).fold(
         ((numbers[0] == 1) as i32, (numbers[0] == 3) as i32),
         |(o, t), &[a, b]| (o + ((b - a) == 1) as i32, t + ((b - a) == 3) as i32),
     );
@@ -711,7 +848,7 @@ fn day_11_part_1(data: &str) -> i64 {
     let mut bot = Box::new([0u8; W + 2]);
     let mut hash = 0;
     loop {
-        for (i, &[a, b, c]) in seats.array_windows().enumerate() {
+        for (i, &[a, b, c]) in array_windows(&seats).enumerate() {
             tmp[i + 1] = ((a == FULL) as u8) + ((b == FULL) as u8) + ((c == FULL) as u8);
         }
 
@@ -756,7 +893,7 @@ fn day_11_part_2(data: &str) -> i64 {
 
     fn step(seats: &[u8], tmp: &mut [u8]) -> bool {
         let read = |x, y| {
-            if x < 0 || x >= W || y < 0 || y >= H {
+            if !(0..W).contains(&x) || !(0..H).contains(&y) {
                 0
             } else {
                 seats[(y * W + x) as usize]
@@ -808,7 +945,7 @@ fn day_11_part_2(data: &str) -> i64 {
             }
         }
         changed
-    };
+    }
 
     while step(&seats, &mut tmp) {
         std::mem::swap(&mut seats, &mut tmp);
@@ -1131,7 +1268,7 @@ fn main() {
         let &[part_1_result, part_2_result] = &results[i];
         let result = runner.bench(format!("day {:02}, part 1", day).as_str(), || part_1(&data));
         assert_eq!(result, part_1_result);
-        let result = runner.bench(format!("        part 2").as_str(), || part_2(&data));
+        let result = runner.bench("        part 2", || part_2(&data));
         assert_eq!(result, part_2_result);
     }
 }

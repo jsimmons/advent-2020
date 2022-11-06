@@ -19,7 +19,6 @@
 //! performance counter support ([#143](https://github.com/rust-lang/measureme/pull/143)).*
 //!
 //! The hardware performance counters (i.e. all counters other than `wall-time`) are limited to:
-//! * nightly Rust (gated on `features = ["nightly"]`), for `asm!`
 //! * Linux, for out-of-the-box performance counter reads from userspace
 //!   * other OSes could work through custom kernel extensions/drivers, in the future
 //! * `x86_64` CPUs, mostly due to lack of other available test hardware
@@ -48,7 +47,16 @@
 //!   * if I/O can be isolated to separate profiling events, and doesn't impact
 //!     execution in a more subtle way (see below), the deterministic parts of
 //!     the program can still be profiled with high accuracy
-//! * low-level non-determinism (e.g. ASLR, randomized `HashMap`s, thread scheduling)
+//!   * intentional uses of randomness may change execution paths, though for
+//!     cryptographic operations specifically, "constant time" implementations
+//!     are preferred / necessary (in order to limit an external observer's
+//!     ability to infer secrets), so they're not as much of a problem
+//!   * even otherwise-deterministic machine-local communication (to e.g. system
+//!     services or drivers) can behave unpredictably (especially under load)
+//!     * while we haven't observed this in the wild yet, it's possible for
+//!       file reads/writes to be split up into multiple smaller chunks
+//!       (and therefore take more userspace instructions to fully read/write)
+//! * low-level non-determinism (e.g. ASLR, randomized `HashMap`s, timers)
 //!   * ASLR ("Address Space Layout Randomization"), may be provided by the OS for
 //!     security reasons, or accidentally caused through allocations that depend on
 //!     random data (even as low-entropy as e.g. the base 10 length of a process ID)
@@ -65,9 +73,17 @@
 //!       ASLR and ASLR-like effects, making the entire program more sensitive
 //!     * the default hasher is randomized, and while `rustc` doesn't use it,
 //!       proc macros can (and will), and it's harder to disable than Linux ASLR
-//!   * `jemalloc` (the allocator used by `rustc`, at least in official releases)
-//!     has a 10 second "purge timer", which can introduce an ASLR-like effect,
-//!     unless disabled with `MALLOC_CONF=dirty_decay_ms:0,muzzy_decay_ms:0`
+//!   * most ways of measuring time will inherently never perfectly align with
+//!     exact points in the program's execution, making time behave like another
+//!     low-entropy source of randomness - this also means timers will elapse at
+//!     unpredictable points (which can further impact the rest of the execution)
+//!     * this includes the common thread scheduler technique of preempting the
+//!       currently executing thread with a periodic timer interrupt, so the exact
+//!       interleaving of multiple threads will likely not be reproducible without
+//!       special OS configuration, or tools that emulate a deterministic scheduler
+//!     * `jemalloc` (the allocator used by `rustc`, at least in official releases)
+//!       has a 10 second "purge timer", which can introduce an ASLR-like effect,
+//!       unless disabled with `MALLOC_CONF=dirty_decay_ms:0,muzzy_decay_ms:0`
 //! * hardware flaws (whether in the design or implementation)
 //!   * hardware interrupts ("IRQs") and exceptions (like page faults) cause
 //!     overcounting (1 instruction per interrupt, possibly the `iret` from the
@@ -100,7 +116,7 @@ use std::time::Instant;
 // https://github.com/rust-lang/rust/issues/76824
 macro_rules! really_warn {
     ($msg:literal $($rest:tt)*) => {
-        log::error!(concat!("[WARNING] ", $msg) $($rest)*)
+        eprintln!(concat!("[WARNING] ", $msg) $($rest)*)
     }
 }
 
@@ -273,7 +289,7 @@ trait HwCounterRead {
     fn read(&self) -> Self::Output;
 }
 
-enum HwCounterType {
+pub enum HwCounterType {
     Instructions,
     Irqs,
     Raw0420,
@@ -283,35 +299,32 @@ const BUG_REPORT_MSG: &str =
     "please report this to https://github.com/rust-lang/measureme/issues/new";
 
 /// Linux x86_64 implementation based on `perf_event_open` and `rdpmc`.
-#[cfg(all(feature = "nightly", target_arch = "x86_64", target_os = "linux"))]
+#[cfg(all(target_arch = "x86_64", target_os = "linux"))]
 mod hw {
-    use log::info;
-    use memmap::{Mmap, MmapOptions};
+    use memmap2::{Mmap, MmapOptions};
     use perf_event_open_sys::{bindings::*, perf_event_open};
+    use std::arch::asm;
     use std::convert::TryInto;
     use std::error::Error;
     use std::fs;
     use std::mem;
     use std::os::unix::io::FromRawFd;
 
-    pub(super) struct Counter {
+    pub struct Counter {
         mmap: Mmap,
         reg_idx: u32,
     }
 
     impl Counter {
-        pub(super) fn new(
+        pub fn new(
             model: &CpuModel,
             counter_type: super::HwCounterType,
         ) -> Result<Self, Box<dyn Error + Send + Sync>> {
             let (type_, hw_id) = match counter_type {
-                super::HwCounterType::Instructions => (
-                    perf_type_id_PERF_TYPE_HARDWARE,
-                    perf_hw_id_PERF_COUNT_HW_INSTRUCTIONS,
-                ),
-                super::HwCounterType::Irqs => {
-                    (perf_type_id_PERF_TYPE_RAW, model.irqs_counter_config()?)
+                super::HwCounterType::Instructions => {
+                    (PERF_TYPE_HARDWARE, PERF_COUNT_HW_INSTRUCTIONS)
                 }
+                super::HwCounterType::Irqs => (PERF_TYPE_RAW, model.irqs_counter_config()?),
                 super::HwCounterType::Raw0420 => {
                     match model {
                         CpuModel::Amd(AmdGen::Zen) => {}
@@ -322,7 +335,7 @@ mod hw {
                         ),
                     }
 
-                    (perf_type_id_PERF_TYPE_RAW, 0x04_20)
+                    (PERF_TYPE_RAW, 0x04_20)
                 }
             };
             Self::with_type_and_hw_id(type_, hw_id)
@@ -509,41 +522,22 @@ mod hw {
     /// the width of the register (32 to 64 bits, e.g. 48-bit seems common).
     #[inline(always)]
     fn rdpmc(reg_idx: u32) -> u64 {
-        let (lo, hi): (u32, u32);
-        unsafe {
-            // NOTE(eddyb) below comment is outdated (the other branch uses `cpuid`).
-            if cfg!(unserialized_rdpmc) && false {
-                // FIXME(eddyb) the Intel and AMD manuals warn about the need for
-                // "serializing instructions" before/after `rdpmc`, if avoiding any
-                // reordering is desired, but do not agree on the full set of usable
-                // "serializing instructions" (e.g. `mfence` isn't listed in both).
-                //
-                // The only usable, and guaranteed to work, "serializing instruction"
-                // appears to be `cpuid`, but it doesn't seem easy to use, especially
-                // due to the overlap in registers with `rdpmc` itself, and it might
-                // have too high of a cost, compared to serialization benefits (if any).
-                asm!("rdpmc", in("ecx") reg_idx, out("eax") lo, out("edx") hi, options(nostack));
-            } else {
-                asm!(
-                    // Dummy `cpuid(0)` to serialize instruction execution.
-                    "xor eax, eax",
-                    "cpuid",
-
-                    "mov ecx, {rdpmc_ecx:e}",
-                    "rdpmc",
-                    rdpmc_ecx = in(reg) reg_idx,
-                    out("eax") lo,
-                    out("edx") hi,
-
-                    // `cpuid` clobbers (not overwritten by `rdpmc`).
-                    out("ebx") _,
-                    out("ecx") _,
-
-                    options(nostack),
-                );
-            }
+        // NOTE(eddyb) below comment is outdated (the other branch uses `cpuid`).
+        if cfg!(unserialized_rdpmc) && false {
+            // FIXME(eddyb) the Intel and AMD manuals warn about the need for
+            // "serializing instructions" before/after `rdpmc`, if avoiding any
+            // reordering is desired, but do not agree on the full set of usable
+            // "serializing instructions" (e.g. `mfence` isn't listed in both).
+            //
+            // The only usable, and guaranteed to work, "serializing instruction"
+            // appears to be `cpuid`, but it doesn't seem easy to use, especially
+            // due to the overlap in registers with `rdpmc` itself, and it might
+            // have too high of a cost, compared to serialization benefits (if any).
+            unserialized_rdpmc(reg_idx)
+        } else {
+            serialize_instruction_execution();
+            unserialized_rdpmc(reg_idx)
         }
-        lo as u64 | (hi as u64) << 32
     }
 
     /// Read two hardware performance counters at once (see `rdpmc`).
@@ -552,48 +546,69 @@ mod hw {
     /// only requires one "serializing instruction", rather than two.
     #[inline(always)]
     fn rdpmc_pair(a_reg_idx: u32, b_reg_idx: u32) -> (u64, u64) {
-        let (a_lo, a_hi): (u32, u32);
-        let (b_lo, b_hi): (u32, u32);
+        serialize_instruction_execution();
+        (unserialized_rdpmc(a_reg_idx), unserialized_rdpmc(b_reg_idx))
+    }
+
+    /// Dummy `cpuid(0)` to serialize instruction execution.
+    #[inline(always)]
+    fn serialize_instruction_execution() {
         unsafe {
             asm!(
-                // Dummy `cpuid(0)` to serialize instruction execution.
-                "xor eax, eax",
+                "xor %eax, %eax", // Intel syntax: "xor eax, eax"
+                // LLVM sometimes reserves `ebx` for its internal use, so we need to use
+                // a scratch register for it instead.
+                "mov %rbx, {tmp_rbx:r}", // Intel syntax: "mov {tmp_rbx:r}, rbx"
                 "cpuid",
-
-                "mov ecx, {a_rdpmc_ecx:e}",
-                "rdpmc",
-                "mov {a_rdpmc_eax:e}, eax",
-                "mov {a_rdpmc_edx:e}, edx",
-                "mov ecx, {b_rdpmc_ecx:e}",
-                "rdpmc",
-                a_rdpmc_ecx = in(reg) a_reg_idx,
-                a_rdpmc_eax = out(reg) a_lo,
-                a_rdpmc_edx = out(reg) a_hi,
-                b_rdpmc_ecx = in(reg) b_reg_idx,
-                out("eax") b_lo,
-                out("edx") b_hi,
-
-                // `cpuid` clobbers (not overwritten by `rdpmc`).
-                out("ebx") _,
-                out("ecx") _,
+                "mov {tmp_rbx:r}, %rbx", // Intel syntax: "mov rbx, {tmp_rbx:r}"
+                tmp_rbx = lateout(reg) _,
+                // `cpuid` clobbers.
+                lateout("eax") _,
+                lateout("edx") _,
+                lateout("ecx") _,
 
                 options(nostack),
+                // Older versions of LLVM do not support modifiers in
+                // Intel syntax inline asm; whenever Rust minimum LLVM version
+                // supports Intel syntax inline asm, remove and replace above
+                // instructions with Intel syntax version (from comments).
+                options(att_syntax),
             );
         }
-        (
-            a_lo as u64 | (a_hi as u64) << 32,
-            b_lo as u64 | (b_hi as u64) << 32,
-        )
+    }
+
+    /// Read the hardware performance counter indicated by `reg_idx`.
+    ///
+    /// If the counter is signed, sign extension should be performed based on
+    /// the width of the register (32 to 64 bits, e.g. 48-bit seems common).
+    #[inline(always)]
+    fn unserialized_rdpmc(reg_idx: u32) -> u64 {
+        let (lo, hi): (u32, u32);
+        unsafe {
+            asm!(
+                "rdpmc",
+                in("ecx") reg_idx,
+                lateout("eax") lo,
+                lateout("edx") hi,
+                options(nostack),
+                // Older versions of LLVM do not support modifiers in
+                // Intel syntax inline asm; whenever Rust minimum LLVM version
+                // supports Intel syntax inline asm, remove and replace above
+                // instructions with Intel syntax version (from comments).
+                options(att_syntax),
+            );
+        }
+        lo as u64 | (hi as u64) << 32
     }
 
     /// Categorization of `x86_64` CPUs, primarily based on how they
     /// support for counting "hardware interrupts" (documented or not).
-    pub(super) enum CpuModel {
+    pub enum CpuModel {
         Amd(AmdGen),
         Intel(IntelGen),
     }
 
-    pub(super) enum AmdGen {
+    pub enum AmdGen {
         /// K8 (Hammer) to Jaguar / Puma.
         PreZen,
 
@@ -605,7 +620,7 @@ mod hw {
         UnknownMaybeZenLike,
     }
 
-    pub(super) enum IntelGen {
+    pub enum IntelGen {
         /// Intel CPU predating Sandy Bridge. These are the only CPUs we
         /// can't support (more) accurate instruction counting on, as they
         /// don't (appear to) have any way to count "hardware interrupts".
@@ -669,7 +684,7 @@ mod hw {
 
     impl CpuModel {
         /// Detect the model of the current CPU using `cpuid`.
-        pub(super) fn detect() -> Result<Self, Box<dyn Error + Send + Sync>> {
+        pub fn detect() -> Result<Self, Box<dyn Error + Send + Sync>> {
             let cpuid0 = unsafe { std::arch::x86_64::__cpuid(0) };
             let cpuid1 = unsafe { std::arch::x86_64::__cpuid(1) };
             let mut vendor = [0; 12];
@@ -774,7 +789,7 @@ mod hw {
                     // which only reliably remains `0` when `SpecLockMap` is disabled.
                     if matches!(gen, Zen | UnknownMaybeZenLike) {
                         if let Ok(spec_lock_map_commit) =
-                            Counter::with_type_and_hw_id(perf_type_id_PERF_TYPE_RAW, 0x08_25)
+                            Counter::with_type_and_hw_id(PERF_TYPE_RAW, 0x08_25)
                         {
                             use super::HwCounterRead;
 
@@ -787,10 +802,18 @@ mod hw {
                             let mut _tmp: u64 = 0;
                             unsafe {
                                 asm!(
-                                    "lock xadd qword ptr [{atomic}], {tmp}",
+                                    // Intel syntax: "lock xadd [{atomic}], {tmp}"
+                                    "lock xadd {tmp}, ({atomic})",
 
                                     atomic = in(reg) &mut atomic,
                                     tmp = inout(reg) _tmp,
+
+                                    // Older versions of LLVM do not support modifiers in
+                                    // Intel syntax inline asm; whenever Rust minimum LLVM
+                                    // version supports Intel syntax inline asm, remove
+                                    // and replace above instructions with Intel syntax
+                                    // version (from comments).
+                                    options(att_syntax),
                                 );
                             }
 
@@ -908,14 +931,14 @@ mod hw {
     }
 }
 
-#[cfg(not(all(feature = "nightly", target_arch = "x86_64", target_os = "linux")))]
+#[cfg(not(all(target_arch = "x86_64", target_os = "linux")))]
 mod hw {
     use std::error::Error;
 
-    pub(super) enum Counter {}
+    pub enum Counter {}
 
     impl Counter {
-        pub(super) fn new(
+        pub fn new(
             model: &CpuModel,
             _: super::HwCounterType,
         ) -> Result<Self, Box<dyn Error + Send + Sync>> {
@@ -941,10 +964,10 @@ mod hw {
         }
     }
 
-    pub(super) enum CpuModel {}
+    pub enum CpuModel {}
 
     impl CpuModel {
-        pub(super) fn detect() -> Result<Self, Box<dyn Error + Send + Sync>> {
+        pub fn detect() -> Result<Self, Box<dyn Error + Send + Sync>> {
             // HACK(eddyb) mark `really_warn!` (and transitively `log` macros)
             // and `BUG_REPORT_MSG` as "used" to silence warnings.
             if false {
@@ -958,10 +981,6 @@ mod hw {
                 }
                 msg += s;
             };
-
-            if cfg!(not(feature = "nightly")) {
-                add_error("only supported with measureme's \"nightly\" feature");
-            }
 
             if cfg!(not(target_arch = "x86_64")) {
                 add_error("only supported architecture is x86_64");
